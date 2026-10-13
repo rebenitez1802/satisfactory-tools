@@ -161,6 +161,14 @@ body {
   gap: 6px;
   margin-bottom: 16px;
 }
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.field-row .field {
+  min-width: 0;
+}
 .field > span {
   font-size: 12px;
   color: var(--text-dim);
@@ -217,7 +225,7 @@ select:focus {
 }
 .output-row {
   display: grid;
-  grid-template-columns: 1fr 90px auto auto;
+  grid-template-columns: 90px 1fr auto auto;
   gap: 6px;
   align-items: center;
 }
@@ -261,6 +269,10 @@ select:focus {
   border-color: rgba(34, 197, 94, 0.5);
   color: var(--green);
 }
+.sum-row.leftover {
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
 .sum-row.warn {
   border-color: rgba(245, 158, 11, 0.5);
   color: var(--accent-2);
@@ -271,30 +283,38 @@ select:focus {
 }
 
 /* ---- Stats ---- */
+/* Splitter/merger counts are what a player builds, so they get the big tiles;
+   the solver internals (shares, leaf split, loopbacks) are a single text line. */
 .stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
-  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
   margin-top: 8px;
 }
 .stat {
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 10px 8px;
+  padding: 14px 8px;
   text-align: center;
 }
 .stat-value {
   display: block;
-  font-size: 20px;
+  font-size: 30px;
   font-weight: 700;
   color: var(--accent-2);
 }
 .stat-label {
   display: block;
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--text-dim);
-  margin-top: 2px;
+  margin-top: 4px;
+}
+.stats-detail {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
 }
 
 /* ---- Warnings ---- */
@@ -302,8 +322,7 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 10px;
-  border-bottom: 1px solid var(--border);
+  margin-top: 14px;
 }
 .warning {
   font-size: 12.5px;
@@ -316,23 +335,17 @@ select:focus {
   border: 1px solid rgba(56, 189, 248, 0.35);
   color: #bae6fd;
 }
+.warning.leftover {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+}
 .warning.belt-over-capacity {
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.4);
   color: #fecaca;
 }
 
-.graph-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-}
-.graph-toolbar-label {
-  font-size: 12px;
-  color: var(--text-dim);
-}
 .seg {
   display: inline-flex;
   border: 1px solid var(--border);
@@ -346,6 +359,14 @@ select:focus {
   padding: 6px 12px;
   font-size: 12px;
   cursor: pointer;
+}
+.seg-full {
+  display: flex;
+}
+.seg-full button {
+  flex: 1;
+  padding: 0 8px;
+  height: 38px;
 }
 .seg button + button {
   border-left: 1px solid var(--border);
@@ -361,6 +382,12 @@ select:focus {
   text-align: center;
   color: var(--text-dim);
   padding: 40px;
+}
+.graph-message strong {
+  color: var(--text);
+  display: block;
+  margin-bottom: 8px;
+  font-size: 15px;
 }
 .graph-message.error strong {
   color: var(--accent-2);
@@ -453,18 +480,45 @@ select:focus {
   white-space: nowrap;
   text-align: center;
 }
+/* Output captions sit above the triangle, clear of the incoming belt's label. */
 .rf-caption-sink {
+  top: auto;
+  bottom: calc(100% + 3px);
   color: #86efac;
+}
+/* Leftover sink: the overflow output for input the user didn't assign. */
+.rf-leftover .rf-tri-up {
+  border-bottom-color: var(--red);
+  filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.7));
+}
+.rf-leftover .rf-caption-sink {
+  color: #fca5a5;
 }
 .rf-caption-source {
   color: var(--accent-2);
 }
 
-/* Connection points: green for inputs, orange for outputs (as in-game). */
+/* Connection points: green for inputs, orange for outputs (as in-game).
+   Plain dots, or rate badges showing the rate on that belt. */
 .react-flow__handle {
   border: 1px solid rgba(0, 0, 0, 0.4);
   width: 9px;
   height: 9px;
+}
+.react-flow__handle.h-badge {
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  width: auto;
+  min-width: 18px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 8px;
+  color: #10161f;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 13px;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 .react-flow__handle.h-in {
   background: var(--green);
@@ -499,6 +553,21 @@ select:focus {
 .react-flow__edge.edge-over .react-flow__edge-path {
   stroke: var(--red);
   stroke-width: 2.5;
+}
+/* Highlighted belts (hovered or pinned) pop out; everything else fades. */
+.react-flow__edge.edge-dim .react-flow__edge-path {
+  opacity: 0.15;
+}
+.react-flow__edge.edge-dim .react-flow__edge-textwrapper {
+  opacity: 0.25;
+}
+.react-flow__edge.edge-hl .react-flow__edge-path {
+  stroke: #fde68a;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 4px rgba(253, 230, 138, 0.6));
+}
+.react-flow__edge {
+  cursor: pointer;
 }
 .react-flow__minimap {
   background: var(--bg-2);
