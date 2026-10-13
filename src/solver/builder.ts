@@ -1,18 +1,21 @@
-// Construct a splitter/merger graph that divides one input belt into the
-// requested integer ratios.
+// Construct a compact splitter/merger graph that divides one input belt into
+// the requested integer ratios.
 //
 // Strategy (see the project README for the full write-up):
 //   1. The caller has already reduced the outputs to integer ratios r_i with
-//      N = sum(r_i).
+//      N = sum(r_i). We work in "units" where 1 unit = input / N.
 //   2. Pick B = the smallest 3-smooth number (only factors 2 and 3) with B >= N.
-//   3. Split the belt evenly into B leaves with a plain splitter tree.
-//   4. Give output i exactly r_i leaves (merged together); route the remaining
-//      B - N leaves back into the belt feeding the tree root.
-//   5. In steady state every leaf carries input/N, so output i carries
-//      r_i * input / N, which is its target rate.
+//      The belt is grown to B units; the extra B - N units are looped back.
+//   3. Recursively divide the B-unit trunk: at each belt carrying V units, split
+//      evenly by 2 or 3, then partition the amounts it must still deliver across
+//      the sub-belts, cutting an amount only where it crosses a sub-belt
+//      boundary. Recurse until a sub-belt carries exactly one output's amount.
+//   4. Each output collects its (few) delivered pieces through a small merger
+//      tree. The looped-back units rejoin the input before the trunk.
 //
-// When N is itself 3-smooth, B === N, there are no leftover leaves and the graph
-// is a pure acyclic tree. Otherwise exactly one feedback loop is introduced.
+// This keeps belts aggregated instead of fanning the whole belt out to N unit
+// streams, so the graph stays small (a handful of nodes) even for awkward
+// ratios. When N is itself 3-smooth there is no leftover and no loop.
 
 import type { GEdge, GNode, Graph } from './types'
 
@@ -58,7 +61,9 @@ class Builder {
   }
 
   addNode(kind: GNode['kind'], extra: Partial<GNode> = {}): string {
-    const id = this.id(kind === 'splitter' ? 's' : kind === 'merger' ? 'm' : kind === 'sink' ? 'o' : 'src')
+    const id = this.id(
+      kind === 'splitter' ? 's' : kind === 'merger' ? 'm' : kind === 'sink' ? 'o' : 'src',
+    )
     this.nodes.push({ id, kind, ...extra })
     return id
   }
@@ -92,6 +97,94 @@ class Builder {
   }
 }
 
+/** A demand: `amt` units destined for the belt collector identified by `id`. */
+interface Demand {
+  id: string
+  amt: number
+}
+
+/** Split `demands` into `f` bins each summing to `cap`, cutting minimally. */
+function partition(demands: Demand[], f: number, cap: number): Demand[][] {
+  const items = demands.map((d) => ({ id: d.id, amt: d.amt }))
+  const bins: Demand[][] = []
+
+  for (let k = 0; k < f; k++) {
+    const bin: Demand[] = []
+    let room = cap
+
+    // Place whole items largest-first while they still fit.
+    for (;;) {
+      let best = -1
+      for (let j = 0; j < items.length; j++) {
+        if (items[j].amt > 0 && items[j].amt <= room && (best < 0 || items[j].amt > items[best].amt)) {
+          best = j
+        }
+      }
+      if (best < 0) break
+      bin.push({ id: items[best].id, amt: items[best].amt })
+      room -= items[best].amt
+      items[best].amt = 0
+    }
+
+    // Top the bin off by cutting the largest remaining item.
+    if (room > 0) {
+      let best = -1
+      for (let j = 0; j < items.length; j++) {
+        if (items[j].amt > 0 && (best < 0 || items[j].amt > items[best].amt)) best = j
+      }
+      bin.push({ id: items[best].id, amt: room })
+      items[best].amt -= room
+      room = 0
+    }
+
+    bins.push(bin)
+  }
+  return bins
+}
+
+const countPieces = (bins: Demand[][]) => bins.reduce((s, b) => s + b.length, 0)
+
+/** Pick a split factor (2 or 3) that divides V and yields the fewest pieces. */
+function chooseFactor(v: number, demands: Demand[]): number {
+  const can2 = v % 2 === 0
+  const can3 = v % 3 === 0
+  if (can2 && can3) {
+    const p2 = countPieces(partition(demands, 2, v / 2))
+    const p3 = countPieces(partition(demands, 3, v / 3))
+    // Prefer 3 on a tie: a shallower tree with the same piece count.
+    return p3 <= p2 ? 3 : 2
+  }
+  return can3 ? 3 : 2
+}
+
+/**
+ * Recursively divide a belt of `v` units (produced by `producer`'s output) so
+ * that it delivers exactly `demands`. Each time a whole belt lands on a single
+ * demand, `deliver(id, producer)` records that producer as feeding that id.
+ */
+function distribute(
+  b: Builder,
+  producer: string,
+  v: number,
+  demands: Demand[],
+  deliver: (id: string, producer: string) => void,
+): void {
+  if (demands.length === 1) {
+    // The whole belt (v units) goes to this demand.
+    deliver(demands[0].id, producer)
+    return
+  }
+
+  const f = chooseFactor(v, demands)
+  const cap = v / f
+  const splitter = b.addNode('splitter')
+  b.addEdge(producer, splitter)
+
+  for (const bin of partition(demands, f, cap)) {
+    distribute(b, splitter, cap, bin, deliver)
+  }
+}
+
 export interface BuiltGraph {
   graph: Graph
   leafCount: number
@@ -105,59 +198,46 @@ export interface BuiltGraph {
 export function buildBalancer(ratios: number[], outputLabels?: (string | undefined)[]): BuiltGraph {
   const N = ratios.reduce((s, r) => s + r, 0)
   const B = smooth3AtLeast(N)
-  const feedbackCount = B - N
+  const feedback = B - N
 
   const b = new Builder()
   const source = b.addNode('source', { label: 'Input' })
+  const sinkIds = ratios.map((_, i) => b.addNode('sink', { label: outputLabels?.[i] }))
 
   // Degenerate case: a single output equal to the whole input.
   if (B === 1) {
-    const sink = b.addNode('sink', { label: outputLabels?.[0], target: undefined })
-    b.addEdge(source, sink)
+    b.addEdge(source, sinkIds[0])
     return { graph: { nodes: b.nodes, edges: b.edges }, leafCount: 1, loopbacks: 0 }
   }
 
-  // --- 1. Splitter tree: one root splitter down to B equal leaf ports. ---
-  const factors = factorizeSmooth(B)
-  const root = b.addNode('splitter')
-  let level: string[] = new Array(factors[0]).fill(root)
-  for (let fi = 1; fi < factors.length; fi++) {
-    const f = factors[fi]
-    const next: string[] = []
-    for (const producer of level) {
-      const sp = b.addNode('splitter')
-      b.addEdge(producer, sp)
-      for (let k = 0; k < f; k++) next.push(sp)
-    }
-    level = next
-  }
-  const leaves = level // length B; each bottom splitter appears (last factor) times
+  // Demands: one per output, plus the loopback remainder if N isn't 3-smooth.
+  const demands: Demand[] = ratios.map((r, i) => ({ id: `out${i}`, amt: r }))
+  if (feedback > 0) demands.push({ id: 'loop', amt: feedback })
 
-  // --- 2. Hand out leaves: r_i per output, the remainder to feedback. ---
-  let cursor = 0
-  ratios.forEach((r, i) => {
-    const group = leaves.slice(cursor, cursor + r)
-    cursor += r
-    const producer = b.mergeStreams(group)
-    const sink = b.addNode('sink', { label: outputLabels?.[i] })
-    b.addEdge(producer, sink)
+  const collectors = new Map<string, string[]>()
+  const deliver = (id: string, prod: string) => {
+    const list = collectors.get(id)
+    if (list) list.push(prod)
+    else collectors.set(id, [prod])
+  }
+
+  // The trunk carries B units. With a loopback it is fed by a merger that
+  // combines the source with the returned belts; otherwise the source feeds it.
+  const trunkMerger = feedback > 0 ? b.addNode('merger') : null
+  distribute(b, trunkMerger ?? source, B, demands, deliver)
+
+  // Each output collects its delivered pieces through a merger tree.
+  ratios.forEach((_, i) => {
+    const prod = b.mergeStreams(collectors.get(`out${i}`) ?? [])
+    b.addEdge(prod, sinkIds[i])
   })
-  const feedbackLeaves = leaves.slice(cursor) // length feedbackCount
 
-  // --- 3. Feed the tree root with source + any feedback leaves. ---
-  if (feedbackCount === 0) {
-    b.addEdge(source, root)
-  } else {
-    const feedbackProducer = b.mergeStreams(feedbackLeaves, true)
-    const rootMerger = b.addNode('merger')
-    b.addEdge(source, rootMerger)
-    b.addEdge(feedbackProducer, rootMerger, true)
-    b.addEdge(rootMerger, root)
+  // Close the loop: returned belts merge back into the trunk alongside the input.
+  if (trunkMerger) {
+    const prod = b.mergeStreams(collectors.get('loop') ?? [], true)
+    b.addEdge(source, trunkMerger)
+    b.addEdge(prod, trunkMerger, true)
   }
 
-  return {
-    graph: { nodes: b.nodes, edges: b.edges },
-    leafCount: B,
-    loopbacks: feedbackCount,
-  }
+  return { graph: { nodes: b.nodes, edges: b.edges }, leafCount: B, loopbacks: feedback }
 }

@@ -119,6 +119,22 @@ describe('solve: arbitrary ratios', () => {
     })
   }
 
+  it('builds a compact graph (no fan-out to unit streams)', () => {
+    // 136 -> 60/40/36 reduces to 15:10:9 (N=34). The recursive construction
+    // keeps belts aggregated, so this must stay small (reference design is
+    // ~5 splitters + 4 mergers), not ~36 leaf splitters.
+    const res = solve({ input: 136, outputs: [60, 40, 36].map((rate) => ({ rate })) })
+    expect(res.ok).toBe(true)
+    const splitters = res.graph!.nodes.filter((n) => n.kind === 'splitter').length
+    const mergers = res.graph!.nodes.filter((n) => n.kind === 'merger').length
+    expect(splitters).toBeLessThanOrEqual(8)
+    expect(mergers).toBeLessThanOrEqual(8)
+
+    // A coprime split like 37:63 (N=100) must NOT create ~100 splitters.
+    const big = solve({ input: 100, outputs: [37, 63].map((rate) => ({ rate })) })
+    expect(big.graph!.nodes.filter((n) => n.kind === 'splitter').length).toBeLessThan(15)
+  })
+
   it('rejects outputs that do not sum to input', () => {
     const res = solve({ input: 100, outputs: [{ rate: 40 }, { rate: 40 }] })
     expect(res.ok).toBe(false)

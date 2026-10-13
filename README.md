@@ -20,30 +20,37 @@ In Satisfactory:
 #### How the solver works
 
 1. The output rates are reduced to coprime integer ratios `r₁ : r₂ : … : rₖ`,
-   with `N = Σ rᵢ`.
+   with `N = Σ rᵢ`. We work in **units** where 1 unit = `input / N`.
 2. We pick `B`, the smallest **3-smooth** number (a number whose only prime
    factors are 2 and 3: 1, 2, 3, 4, 6, 8, 9, 12, 16, 18, 24, …) with `B ≥ N`.
-3. A plain splitter tree divides the belt evenly into `B` equal **leaves** — this
-   is always possible because `B` is a product of 2s and 3s.
-4. Each output `i` is given exactly `rᵢ` leaves (merged back together). The
-   leftover `B − N` leaves are routed **back** into the belt feeding the top of
-   the tree.
-5. At steady state the loop forces every leaf to carry `input / N`, so output `i`
-   carries `rᵢ · input / N` — exactly its target rate. The feedback trunk carries
-   `input · B / N` (always `< 2 × input`).
+   The belt is grown to `B` units and the extra `B − N` units are looped back.
+3. The `B`-unit trunk is divided **recursively**: at each belt carrying `V`
+   units, split evenly by 2 or 3, then partition the amounts that belt must still
+   deliver across the sub-belts — cutting an amount **only** where it crosses a
+   sub-belt boundary. Recurse until a sub-belt carries exactly one output's
+   amount.
+4. Each output collects its (few) delivered pieces through a small merger tree.
+   The looped-back units rejoin the input before the trunk.
+5. At steady state the loop forces every unit belt to carry `input / N`, so each
+   output hits its target rate. The trunk carries `input · B / N` (always
+   `< 2 × input`).
+
+Keeping belts **aggregated** — rather than fanning the whole belt out to `N`
+unit streams and merging them back — is what keeps the graph small. For example
+`136 → 60 / 40 / 36` (ratio 15:10:9) builds **5 splitters + 4 mergers**, and a
+coprime split like `100 → 37 / 63` stays at ~5 splitters instead of ~100.
 
 When `N` is itself 3-smooth (e.g. splitting into 2, 3, 4, 6, 8, 9 … equal parts),
-`B = N`, there are no leftover leaves, and the graph is a **pure tree with no
-loops**. Otherwise (fifths, sevenths, elevenths, thirteenths, …) exactly one
-**feedback loop** is introduced — the same trick real Satisfactory "odd belt
-balancers" use.
+`B = N`, there is no leftover, and the graph is a **pure tree with no loops**.
+Otherwise (fifths, sevenths, elevenths, thirteenths, …) a **feedback loop** is
+introduced — the same trick real Satisfactory "odd belt balancers" use.
+
+> The construction is compact and provably correct, though not guaranteed
+> minimal; the per-level split choice is a greedy (fewest cuts) heuristic.
 
 Every generated graph is checked by a **flow simulator** that iterates the
 network to steady state and confirms each output matches its target before the
 graph is displayed, so loop designs are proven correct, not guessed.
-
-> These designs are provably correct but not necessarily minimal; a future pass
-> can add the more compact community balancer patterns.
 
 ## Development
 
