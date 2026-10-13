@@ -3,20 +3,28 @@
 // Feedback edges are ignored when computing layers (otherwise the graph has
 // cycles and no topological order); they simply render as belts looping back
 // from a deeper layer to a shallower one.
+//
+// Two ranks are pinned so the input and outputs are visually isolated:
+//   - the source sits alone in rank 0 (it is the only node with no inputs);
+//   - every sink is pushed to one shared final rank, aligned together, even if
+//     some outputs could be tapped earlier.
+// `direction` controls whether ranks run left-to-right or bottom-to-top.
 
 import type { Graph } from './types'
+
+export type Direction = 'LR' | 'BT'
 
 export interface Positioned {
   id: string
   x: number
   y: number
-  layer: number
+  rank: number
 }
 
-const X_GAP = 240
-const Y_GAP = 110
+const MAJOR_GAP = 240 // distance between ranks
+const MINOR_GAP = 110 // distance between nodes within a rank
 
-export function layoutGraph(graph: Graph): Map<string, Positioned> {
+export function layoutGraph(graph: Graph, direction: Direction = 'LR'): Map<string, Positioned> {
   const forward = graph.edges.filter((e) => !e.feedback)
 
   const indeg = new Map<string, number>()
@@ -30,34 +38,49 @@ export function layoutGraph(graph: Graph): Map<string, Positioned> {
     indeg.set(e.target, (indeg.get(e.target) ?? 0) + 1)
   }
 
-  // Kahn topological order over the acyclic (non-feedback) graph.
-  const layer = new Map<string, number>(graph.nodes.map((n) => [n.id, 0]))
-  const queue = graph.nodes.filter((n) => (indeg.get(n.id) ?? 0) === 0).map((n) => n.id)
+  // Kahn topological order over the acyclic (non-feedback) graph, tracking the
+  // longest path to each node as its rank.
+  const rank = new Map<string, number>(graph.nodes.map((n) => [n.id, 0]))
   const workIndeg = new Map(indeg)
-  const order: string[] = []
+  const queue = graph.nodes.filter((n) => (indeg.get(n.id) ?? 0) === 0).map((n) => n.id)
   while (queue.length) {
     const u = queue.shift()!
-    order.push(u)
     for (const v of adj.get(u)!) {
-      layer.set(v, Math.max(layer.get(v)!, layer.get(u)! + 1))
+      rank.set(v, Math.max(rank.get(v)!, rank.get(u)! + 1))
       workIndeg.set(v, workIndeg.get(v)! - 1)
       if (workIndeg.get(v) === 0) queue.push(v)
     }
   }
 
-  // Group by layer and stack vertically, centered around 0.
-  const byLayer = new Map<number, string[]>()
+  // Pin all sinks to a shared final rank, one past the deepest non-sink node,
+  // so the outputs line up together and sit alone in the last rank.
+  const isSink = new Set(graph.nodes.filter((n) => n.kind === 'sink').map((n) => n.id))
+  let maxNonSink = 0
   for (const n of graph.nodes) {
-    const l = layer.get(n.id)!
-    if (!byLayer.has(l)) byLayer.set(l, [])
-    byLayer.get(l)!.push(n.id)
+    if (!isSink.has(n.id)) maxNonSink = Math.max(maxNonSink, rank.get(n.id)!)
+  }
+  const finalRank = maxNonSink + 1
+  for (const id of isSink) rank.set(id, finalRank)
+
+  // Group by rank and lay nodes out, centered on the cross axis.
+  const byRank = new Map<number, string[]>()
+  for (const n of graph.nodes) {
+    const r = rank.get(n.id)!
+    if (!byRank.has(r)) byRank.set(r, [])
+    byRank.get(r)!.push(n.id)
   }
 
   const pos = new Map<string, Positioned>()
-  for (const [l, ids] of byLayer) {
-    const height = (ids.length - 1) * Y_GAP
+  for (const [r, ids] of byRank) {
+    const span = (ids.length - 1) * MINOR_GAP
     ids.forEach((id, i) => {
-      pos.set(id, { id, layer: l, x: l * X_GAP, y: i * Y_GAP - height / 2 })
+      const minor = i * MINOR_GAP - span / 2
+      const major = r * MAJOR_GAP
+      // Bottom-to-top: the source (rank 0) sits at the bottom, so higher ranks
+      // move up the screen (negative y, since React Flow's y grows downward).
+      const x = direction === 'BT' ? minor : major
+      const y = direction === 'BT' ? -major : minor
+      pos.set(id, { id, rank: r, x, y })
     })
   }
   return pos

@@ -13,11 +13,12 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { layoutGraph } from '../solver'
-import type { SolveResult } from '../solver'
+import type { Direction, SolveResult } from '../solver'
 
 interface NodeData {
   title: string
   sub?: string
+  dir: Direction
   [key: string]: unknown
 }
 
@@ -26,11 +27,16 @@ function round(n: number | undefined): string {
   return Number(n.toFixed(3)).toString()
 }
 
+// Handle sides follow the flow direction. Bottom-to-top: belts enter from below
+// and leave from the top. Left-to-right: enter from the left, leave on the right.
+const targetSide = (dir: Direction) => (dir === 'BT' ? Position.Bottom : Position.Left)
+const sourceSide = (dir: Direction) => (dir === 'BT' ? Position.Top : Position.Right)
+
 function SourceNode({ data }: NodeProps<Node<NodeData>>) {
   return (
     <div className="rf-node rf-source">
       <div className="rf-title">{data.title}</div>
-      <Handle type="source" position={Position.Right} />
+      <Handle type="source" position={sourceSide(data.dir)} />
     </div>
   )
 }
@@ -38,7 +44,7 @@ function SourceNode({ data }: NodeProps<Node<NodeData>>) {
 function SinkNode({ data }: NodeProps<Node<NodeData>>) {
   return (
     <div className="rf-node rf-sink">
-      <Handle type="target" position={Position.Left} />
+      <Handle type="target" position={targetSide(data.dir)} />
       <div className="rf-title">{data.title}</div>
     </div>
   )
@@ -47,10 +53,10 @@ function SinkNode({ data }: NodeProps<Node<NodeData>>) {
 function SplitterNode({ data }: NodeProps<Node<NodeData>>) {
   return (
     <div className="rf-node rf-splitter">
-      <Handle type="target" position={Position.Left} />
+      <Handle type="target" position={targetSide(data.dir)} />
       <div className="rf-kind">Splitter</div>
       <div className="rf-sub">{data.sub}</div>
-      <Handle type="source" position={Position.Right} />
+      <Handle type="source" position={sourceSide(data.dir)} />
     </div>
   )
 }
@@ -58,10 +64,10 @@ function SplitterNode({ data }: NodeProps<Node<NodeData>>) {
 function MergerNode({ data }: NodeProps<Node<NodeData>>) {
   return (
     <div className="rf-node rf-merger">
-      <Handle type="target" position={Position.Left} />
+      <Handle type="target" position={targetSide(data.dir)} />
       <div className="rf-kind">Merger</div>
       <div className="rf-sub">{data.sub}</div>
-      <Handle type="source" position={Position.Right} />
+      <Handle type="source" position={sourceSide(data.dir)} />
     </div>
   )
 }
@@ -73,10 +79,16 @@ const nodeTypes = {
   merger: MergerNode,
 }
 
-export function GraphView({ result }: { result: SolveResult }) {
+export function GraphView({
+  result,
+  direction,
+}: {
+  result: SolveResult
+  direction: Direction
+}) {
   const { nodes, edges, signature } = useMemo(() => {
     const graph = result.graph!
-    const pos = layoutGraph(graph)
+    const pos = layoutGraph(graph, direction)
 
     const outdeg = new Map<string, number>()
     const indeg = new Map<string, number>()
@@ -106,7 +118,7 @@ export function GraphView({ result }: { result: SolveResult }) {
         id: n.id,
         type: n.kind,
         position: { x: p.x, y: p.y },
-        data: { title, sub },
+        data: { title, sub, dir: direction },
       }
     })
 
@@ -131,10 +143,10 @@ export function GraphView({ result }: { result: SolveResult }) {
       }
     })
 
-    // Signature forces a refit when the topology changes.
-    const signature = `${graph.nodes.length}:${graph.edges.length}:${result.N}:${result.leafCount}`
+    // Signature forces a refit when the topology or direction changes.
+    const signature = `${direction}:${graph.nodes.length}:${graph.edges.length}:${result.N}:${result.leafCount}`
     return { nodes: rfNodes, edges: rfEdges, signature }
-  }, [result])
+  }, [result, direction])
 
   return (
     <div className="graph-canvas">

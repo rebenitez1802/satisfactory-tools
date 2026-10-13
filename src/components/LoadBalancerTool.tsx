@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { solve } from '../solver'
-import type { OutputSpec, SolveResult } from '../solver'
+import type { Direction, OutputSpec, SolveResult } from '../solver'
 import { GraphView } from './GraphView'
 
 interface OutputRow {
@@ -28,6 +28,7 @@ export function LoadBalancerTool() {
   const nextId = useRef(3)
   const [input, setInput] = useState('120')
   const [beltMax, setBeltMax] = useState(0)
+  const [direction, setDirection] = useState<Direction>('LR')
   const [outputs, setOutputs] = useState<OutputRow[]>([
     { id: 0, label: '', rate: '40' },
     { id: 1, label: '', rate: '40' },
@@ -178,6 +179,25 @@ export function LoadBalancerTool() {
       </section>
 
       <section className="panel graph-panel">
+        <div className="graph-toolbar">
+          <span className="graph-toolbar-label">Layout</span>
+          <div className="seg">
+            <button
+              type="button"
+              className={direction === 'LR' ? 'active' : ''}
+              onClick={() => setDirection('LR')}
+            >
+              Horizontal →
+            </button>
+            <button
+              type="button"
+              className={direction === 'BT' ? 'active' : ''}
+              onClick={() => setDirection('BT')}
+            >
+              Vertical ↑
+            </button>
+          </div>
+        </div>
         {result.error ? (
           <div className="graph-message error">
             <strong>Can't build a graph yet</strong>
@@ -194,7 +214,7 @@ export function LoadBalancerTool() {
                 ))}
               </div>
             )}
-            <GraphView result={result} />
+            <GraphView result={result} direction={direction} />
           </>
         )}
       </section>
