@@ -19,6 +19,8 @@ export interface GNode {
   label?: string
   /** For sinks: the target rate this output should carry (parts/min). */
   target?: number
+  /** For sinks: auto-added overflow output carrying input the user didn't assign. */
+  leftover?: boolean
 }
 
 export interface GEdge {
@@ -52,7 +54,7 @@ export interface SolveInput {
 }
 
 export interface SolveWarning {
-  kind: 'belt-over-capacity' | 'info'
+  kind: 'belt-over-capacity' | 'leftover' | 'info'
   message: string
   /** Edge ids this warning refers to, when applicable. */
   edgeIds?: string[]
@@ -69,6 +71,8 @@ export interface SolveResult {
   leafCount?: number
   /** Number of feedback (loopback) belts, i.e. B - N. */
   loopbacks?: number
+  /** Rate routed to the auto-added leftover output (0 when outputs sum to input). */
+  leftover?: number
   warnings: SolveWarning[]
   /** Set when ok === false. */
   error?: string

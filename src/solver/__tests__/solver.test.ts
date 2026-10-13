@@ -135,10 +135,31 @@ describe('solve: arbitrary ratios', () => {
     expect(big.graph!.nodes.filter((n) => n.kind === 'splitter').length).toBeLessThan(15)
   })
 
-  it('rejects outputs that do not sum to input', () => {
-    const res = solve({ input: 100, outputs: [{ rate: 40 }, { rate: 40 }] })
+  it('rejects outputs that exceed the input', () => {
+    const res = solve({ input: 100, outputs: [{ rate: 60 }, { rate: 60 }] })
     expect(res.ok).toBe(false)
     expect(res.error).toMatch(/sum/i)
+  })
+
+  it('routes a shortfall to an extra leftover output', () => {
+    const res = solve({ input: 100, outputs: [{ rate: 40 }, { rate: 33.3 }] })
+    expect(res.ok).toBe(true)
+    expect(res.leftover).toBeCloseTo(26.7, 6)
+    const sinks = res.graph!.nodes.filter((n) => n.kind === 'sink')
+    expect(sinks).toHaveLength(3)
+    expect(sinks.filter((s) => s.leftover)).toHaveLength(1)
+    expect(sinks[2].leftover).toBe(true)
+    const sim = simulate(res.graph!, 100)
+    expect(sim.nodeInflow.get(sinks[0].id)!).toBeCloseTo(40, 5)
+    expect(sim.nodeInflow.get(sinks[1].id)!).toBeCloseTo(33.3, 5)
+    expect(sim.nodeInflow.get(sinks[2].id)!).toBeCloseTo(26.7, 5)
+    expect(res.warnings.some((w) => w.kind === 'leftover')).toBe(true)
+  })
+
+  it('adds no leftover output when outputs sum to input', () => {
+    const res = solve({ input: 120, outputs: [40, 40, 40].map((rate) => ({ rate })) })
+    expect(res.leftover).toBe(0)
+    expect(res.graph!.nodes.some((n) => n.leftover)).toBe(false)
   })
 
   it('flags belt over-capacity when a cap is given', () => {

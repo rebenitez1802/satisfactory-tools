@@ -14,7 +14,8 @@ function round(n: number, dp = 4): number {
 
 export function solve(input: SolveInput): SolveResult {
   const warnings: SolveWarning[] = []
-  const { input: inputRate, outputs, beltMax } = input
+  const { input: inputRate, beltMax } = input
+  let { outputs } = input
 
   if (!(inputRate > 0)) {
     return { ok: false, warnings, error: 'Input rate must be a positive number.' }
@@ -26,15 +27,22 @@ export function solve(input: SolveInput): SolveResult {
     return { ok: false, warnings, error: 'Every output rate must be a positive number.' }
   }
 
+  // Outputs may fall short of the input: the remainder goes to an extra
+  // "leftover" output so the belt never backs up. Exceeding it is impossible.
   const sum = outputs.reduce((s, o) => s + o.rate, 0)
-  if (Math.abs(sum - inputRate) > Math.max(1e-6, inputRate * REL_TOL)) {
+  const tol = Math.max(1e-6, inputRate * REL_TOL)
+  if (sum - inputRate > tol) {
     return {
       ok: false,
       warnings,
-      error: `Outputs sum to ${round(sum)} but the input is ${round(
+      error: `Outputs sum to ${round(sum)} but the input is only ${round(
         inputRate,
-      )}. They must be equal.`,
+      )}. Reduce the outputs so they don't exceed the input.`,
     }
+  }
+  const leftover = inputRate - sum > tol ? Number((inputRate - sum).toFixed(6)) : 0
+  if (leftover > 0) {
+    outputs = [...outputs, { label: 'Leftover', rate: leftover }]
   }
 
   let reduced
@@ -55,6 +63,7 @@ export function solve(input: SolveInput): SolveResult {
     const rateStr = `${round(outputs[i].rate)}/min`
     sink.label = outputs[i].label ? `${outputs[i].label} · ${rateStr}` : rateStr
   })
+  if (leftover > 0) sinks[sinks.length - 1].leftover = true
   const source = graph.nodes.find((n) => n.kind === 'source')
   if (source) source.label = `Input · ${round(inputRate)}/min`
 
@@ -79,6 +88,15 @@ export function solve(input: SolveInput): SolveResult {
         )} but expected ${round(want)}.`,
       }
     }
+  }
+
+  if (leftover > 0) {
+    warnings.push({
+      kind: 'leftover',
+      message:
+        `Outputs add up to ${round(sum)} of ${round(inputRate)}/min, so the ` +
+        `remaining ${round(leftover)}/min goes to a Leftover output (red).`,
+    })
   }
 
   // Informational: loopbacks present.
@@ -115,6 +133,7 @@ export function solve(input: SolveInput): SolveResult {
     N,
     leafCount,
     loopbacks,
+    leftover,
     warnings,
   }
 }

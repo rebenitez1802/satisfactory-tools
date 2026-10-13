@@ -21,7 +21,10 @@ export interface Positioned {
   rank: number
 }
 
-const MAJOR_GAP = 300 // distance between ranks
+// Distance between ranks: the tightest spacing that keeps nodes, belt labels
+// and output captions from overlapping. Horizontal needs more room because
+// captions and labels are wider than they are tall.
+const MAJOR_GAP: Record<Direction, number> = { LR: 140, BT: 80 }
 const MINOR_GAP = 130 // distance between nodes within a rank
 
 export function layoutGraph(graph: Graph, direction: Direction = 'LR'): Map<string, Positioned> {
@@ -75,7 +78,7 @@ export function layoutGraph(graph: Graph, direction: Direction = 'LR'): Map<stri
     const span = (ids.length - 1) * MINOR_GAP
     ids.forEach((id, i) => {
       const minor = i * MINOR_GAP - span / 2
-      const major = r * MAJOR_GAP
+      const major = r * MAJOR_GAP[direction]
       // Bottom-to-top: the source (rank 0) sits at the bottom, so higher ranks
       // move up the screen (negative y, since React Flow's y grows downward).
       const x = direction === 'BT' ? minor : major
