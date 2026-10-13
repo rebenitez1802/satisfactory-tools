@@ -472,6 +472,19 @@ select:focus {
 .react-flow__handle.h-out {
   background: var(--accent);
 }
+.rf-reset {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.rf-reset:hover {
+  border-color: var(--accent);
+}
 .react-flow__edge-text {
   fill: var(--text);
   font-size: 10px;

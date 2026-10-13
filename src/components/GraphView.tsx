@@ -1,15 +1,19 @@
-import { useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   Background,
   Controls,
   Handle,
   MarkerType,
   MiniMap,
+  Panel,
   Position,
   ReactFlow,
+  useEdgesState,
+  useNodesState,
   type Edge,
   type Node,
   type NodeProps,
+  type ReactFlowInstance,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { layoutGraph } from '../solver'
@@ -185,7 +189,7 @@ export function GraphView({
   result: SolveResult
   direction: Direction
 }) {
-  const { nodes, edges, signature } = useMemo(() => {
+  const base = useMemo(() => {
     const graph = result.graph!
     const pos = layoutGraph(graph, direction)
 
@@ -244,30 +248,58 @@ export function GraphView({
         markerEnd: e.feedback
           ? { type: MarkerType.ArrowClosed, color: '#f59e0b', width: 16, height: 16 }
           : undefined,
+        // Opaque label chip so the rate stays readable where belts cross nodes.
+        labelBgPadding: [6, 3],
+        labelBgBorderRadius: 4,
+        labelBgStyle: { fill: '#0d1117', fillOpacity: 0.95, stroke: '#2b3a4d' },
+        labelStyle: { fill: '#e6edf3', fontSize: 11, fontWeight: 600 },
         className: [e.feedback ? 'edge-feedback' : '', over ? 'edge-over' : '']
           .filter(Boolean)
           .join(' '),
       }
     })
 
-    // Signature forces a refit when the topology or direction changes.
+    // Signature forces a remount (and refit) when topology or direction changes.
     const signature = `${direction}:${graph.nodes.length}:${graph.edges.length}:${result.N}:${result.leafCount}`
     return { nodes: rfNodes, edges: rfEdges, signature }
   }, [result, direction])
 
+  // Draggable, stateful nodes/edges. Remounting on `signature` re-seeds the
+  // layout for a new graph; between changes the user's drags are preserved.
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node<NodeData>>(base.nodes)
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(base.edges)
+  const rf = useRef<ReactFlowInstance<Node<NodeData>, Edge> | null>(null)
+
+  // Refresh edge styling (e.g. over-capacity) without disturbing node drags.
+  useEffect(() => {
+    setEdges(base.edges)
+  }, [base, setEdges])
+
+  const resetLayout = useCallback(() => {
+    setNodes(base.nodes.map((n) => ({ ...n })))
+    requestAnimationFrame(() => rf.current?.fitView({ padding: 0.2 }))
+  }, [base, setNodes])
+
   return (
     <div className="graph-canvas">
       <ReactFlow
-        key={signature}
+        key={base.signature}
         nodes={nodes}
         edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onInit={(inst) => (rf.current = inst)}
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         proOptions={{ hideAttribution: true }}
         minZoom={0.1}
-        defaultEdgeOptions={{ labelBgPadding: [4, 2] }}
       >
+        <Panel position="top-right">
+          <button type="button" className="rf-reset" onClick={resetLayout}>
+            ⟲ Reset layout
+          </button>
+        </Panel>
         <Background gap={20} color="#243040" />
         <Controls />
         <MiniMap

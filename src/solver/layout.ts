@@ -21,8 +21,8 @@ export interface Positioned {
   rank: number
 }
 
-const MAJOR_GAP = 240 // distance between ranks
-const MINOR_GAP = 110 // distance between nodes within a rank
+const MAJOR_GAP = 300 // distance between ranks
+const MINOR_GAP = 130 // distance between nodes within a rank
 
 export function layoutGraph(graph: Graph, direction: Direction = 'LR'): Map<string, Positioned> {
   const forward = graph.edges.filter((e) => !e.feedback)
