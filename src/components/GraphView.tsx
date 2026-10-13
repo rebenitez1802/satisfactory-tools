@@ -3,6 +3,7 @@ import {
   Background,
   Controls,
   Handle,
+  MarkerType,
   MiniMap,
   Position,
   ReactFlow,
@@ -116,8 +117,14 @@ export function GraphView({ result }: { result: SolveResult }) {
         source: e.source,
         target: e.target,
         label: round(e.flow),
-        type: e.feedback ? 'smoothstep' : 'default',
+        // Straight orthogonal (right-angle) segments, like the hand-drawn
+        // reference diagrams. Feedback belts get an arrowhead so their
+        // (backward) direction is unmistakable.
+        type: 'step',
         animated: e.feedback,
+        markerEnd: e.feedback
+          ? { type: MarkerType.ArrowClosed, color: '#f59e0b', width: 16, height: 16 }
+          : undefined,
         className: [e.feedback ? 'edge-feedback' : '', over ? 'edge-over' : '']
           .filter(Boolean)
           .join(' '),
