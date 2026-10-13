@@ -377,50 +377,100 @@ select:focus {
 .react-flow {
   background: var(--bg);
 }
+/* Processing nodes share a centered glyph + sub-label layout. */
 .rf-node {
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 12px;
-  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--border);
   background: var(--panel-2);
-  text-align: center;
-  min-width: 70px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
-.rf-title {
-  font-weight: 600;
-  white-space: nowrap;
-}
-.rf-kind {
-  font-weight: 600;
+.rf-glyph {
+  font-weight: 800;
+  font-size: 18px;
+  line-height: 1;
 }
 .rf-sub {
   color: var(--text-dim);
-  font-size: 11px;
+  font-size: 10px;
+  margin-top: 2px;
 }
-.rf-source {
-  background: linear-gradient(180deg, #3a2c0c, #241c08);
-  border-color: var(--accent);
-  color: var(--accent-2);
-}
-.rf-sink {
-  background: linear-gradient(180deg, #0f2e1c, #0b2116);
-  border-color: var(--green);
-  color: #86efac;
-}
+
+/* Splitter = square. */
 .rf-splitter {
-  border-color: #475569;
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  border-color: #64748b;
+  color: #e2e8f0;
+  background: linear-gradient(180deg, #273244, #1a2230);
 }
+/* Merger = circle. */
 .rf-merger {
-  background: linear-gradient(180deg, #0e2636, #0b1b27);
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
   border-color: var(--blue);
   color: #bae6fd;
+  background: radial-gradient(circle at 50% 35%, #123047, #0b1b27);
 }
+
+/* Endpoints (source / sink) = triangles with a floating caption. The caption is
+   absolutely positioned so it never widens the node, keeping handles on the
+   triangle edge. */
+.rf-endpoint {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 34px;
+}
+.rf-tri {
+  width: 0;
+  height: 0;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5));
+}
+.rf-tri-up {
+  border-left: 20px solid transparent;
+  border-right: 20px solid transparent;
+  border-bottom: 34px solid var(--green);
+}
+.rf-tri-down {
+  border-left: 20px solid transparent;
+  border-right: 20px solid transparent;
+  border-top: 34px solid var(--accent);
+}
+.rf-caption {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-weight: 600;
+  font-size: 11px;
+  white-space: nowrap;
+  text-align: center;
+}
+.rf-caption-sink {
+  color: #86efac;
+}
+.rf-caption-source {
+  color: var(--accent-2);
+}
+
+/* Connection points: green for inputs, orange for outputs (as in-game). */
 .react-flow__handle {
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  width: 9px;
+  height: 9px;
+}
+.react-flow__handle.h-in {
+  background: var(--green);
+}
+.react-flow__handle.h-out {
   background: var(--accent);
-  border: none;
-  width: 7px;
-  height: 7px;
 }
 .react-flow__edge-text {
   fill: var(--text);
