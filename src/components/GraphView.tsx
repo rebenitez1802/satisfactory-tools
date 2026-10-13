@@ -264,16 +264,18 @@ export function GraphView({
     return { nodes: rfNodes, edges: rfEdges, signature }
   }, [result, direction])
 
-  // Draggable, stateful nodes/edges. Remounting on `signature` re-seeds the
-  // layout for a new graph; between changes the user's drags are preserved.
+  // Draggable, stateful nodes/edges. Whenever the computed graph changes
+  // (new inputs or a layout-direction toggle) we re-seed positions and refit;
+  // between those changes the user's manual drags are preserved.
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<NodeData>>(base.nodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(base.edges)
   const rf = useRef<ReactFlowInstance<Node<NodeData>, Edge> | null>(null)
 
-  // Refresh edge styling (e.g. over-capacity) without disturbing node drags.
   useEffect(() => {
+    setNodes(base.nodes)
     setEdges(base.edges)
-  }, [base, setEdges])
+    requestAnimationFrame(() => rf.current?.fitView({ padding: 0.2 }))
+  }, [base, setNodes, setEdges])
 
   const resetLayout = useCallback(() => {
     setNodes(base.nodes.map((n) => ({ ...n })))
@@ -283,7 +285,6 @@ export function GraphView({
   return (
     <div className="graph-canvas">
       <ReactFlow
-        key={base.signature}
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
