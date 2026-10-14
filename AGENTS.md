@@ -38,7 +38,8 @@ supplies and goals. Goals carry a 🎯 target or Max, any node can be ⛔
 limited, and the solver sizes the rest (forward, backward or both).
 Generators (coal, fuel, biomass, nuclear) are recipe nodes with a 🎯 MW
 target or Max; the summary shows power used, made and net. Spare byproducts
-(nuclear waste, heavy oil residue, …) flow on into the chains they feed. Splits
+(nuclear waste, heavy oil residue, …) flow on into the chains they feed. ⚡ Build
+chain fills a goal or missing input back to raw resources. Splits
 open a read-only load balancer. Plans live in tabs and autosave to
 localStorage. Game data comes from **mod-ready data packs** (see "Production
 chains" below).
@@ -126,7 +127,7 @@ src/
   catalog/                  Game data, framework-free: types, pack format, buildCatalog merge, icon helpers
   planner/                  Planner logic, framework-free: plan types, rates/power, solve.ts
                             (targets & limits, byproduct stages), create/edit/place helpers,
-                            layout.ts (Tidy, dagre)
+                            layout.ts (Tidy, dagre), autobuild.ts (⚡ Build chain)
   components/planner/       Planner UI: PlannerTool (state, tabs, history), PlanCanvas (React Flow),
                             nodes.tsx (cards), Inspector, Picker, RecipeSelect, BalancerPopup, planner.css
   components/

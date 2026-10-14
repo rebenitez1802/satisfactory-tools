@@ -14,12 +14,14 @@ interface PickerProps {
   at: { x: number; y: number }
   /** Recipes to leave out of palette results (locked alternates). */
   hide?: (recipeId: string) => boolean
+  /** A one-click action listed first, above the options (⚡ Build chain). Hidden while filtering. */
+  action?: { title: string; detail: string; onRun: () => void }
   onPick: (option: PickOption) => void
   onClose: () => void
 }
 
 /** Searchable list of things to add. Arrow keys + Enter to pick, Esc to close. */
-export function Picker({ title, options, hide, at, onPick, onClose }: PickerProps) {
+export function Picker({ title, options, hide, action, at, onPick, onClose }: PickerProps) {
   const { catalog } = usePlanner()
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
@@ -34,6 +36,10 @@ export function Picker({ title, options, hide, at, onPick, onClose }: PickerProp
     [options, catalog, query, hide],
   )
   useEffect(() => setActive(0), [query])
+  // The action takes row 0 when shown; options follow.
+  const lead = action && !query ? action : undefined
+  const rows = shown.length + (lead ? 1 : 0)
+  const optionAt = (i: number) => shown[i - (lead ? 1 : 0)]
 
   // Close on a press anywhere outside. Capture phase: React Flow stops
   // pointer events on the canvas and nodes from bubbling.
@@ -52,12 +58,14 @@ export function Picker({ title, options, hide, at, onPick, onClose }: PickerProp
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      setActive((a) => Math.min(a + 1, shown.length - 1))
+      setActive((a) => Math.min(a + 1, rows - 1))
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       setActive((a) => Math.max(a - 1, 0))
-    } else if (e.key === 'Enter' && shown[active]) {
-      onPick(shown[active])
+    } else if (e.key === 'Enter' && lead && active === 0) {
+      lead.onRun()
+    } else if (e.key === 'Enter' && optionAt(active)) {
+      onPick(optionAt(active))
     } else if (e.key === 'Escape') {
       onClose()
     }
@@ -74,17 +82,33 @@ export function Picker({ title, options, hide, at, onPick, onClose }: PickerProp
         onChange={(e) => setQuery(e.target.value)}
       />
       <div className="pn-picker-list" ref={listRef}>
-        {shown.map((o, i) => (
+        {lead && (
           <button
-            key={optionKey(o)}
             type="button"
-            className={`pn-option${i === active ? ' active' : ''}`}
-            onMouseEnter={() => setActive(i)}
-            onClick={() => onPick(o)}
+            className={`pn-option pn-option-action${active === 0 ? ' active' : ''}`}
+            onMouseEnter={() => setActive(0)}
+            onClick={lead.onRun}
           >
-            <OptionRow option={o} catalog={catalog} />
+            <span className="pn-option-text">
+              <span className="pn-option-name">{lead.title}</span>
+              <span className="pn-option-sub">{lead.detail}</span>
+            </span>
           </button>
-        ))}
+        )}
+        {shown.map((o, j) => {
+          const i = j + (lead ? 1 : 0)
+          return (
+            <button
+              key={optionKey(o)}
+              type="button"
+              className={`pn-option${i === active ? ' active' : ''}`}
+              onMouseEnter={() => setActive(i)}
+              onClick={() => onPick(o)}
+            >
+              <OptionRow option={o} catalog={catalog} />
+            </button>
+          )
+        })}
         {shown.length === 0 && (
           <div className="pn-picker-empty">{options || query ? 'Nothing matches.' : 'Type to search, e.g. "screw" or "iron ore".'}</div>
         )}

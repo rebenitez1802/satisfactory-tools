@@ -6,6 +6,7 @@ import type { Catalog } from '../../catalog'
 import {
   defaultPurity,
   maxClock,
+  openInputs,
   minClock,
   outputMultiplier,
   sameProductRecipes,
@@ -27,6 +28,8 @@ export interface InspectorActions {
   removeNodes: (ids: string[]) => void
   removeEdges: (ids: string[]) => void
   duplicate: (ids: string[]) => void
+  /** ⚡ Build chain for every input of the node that has no belt. */
+  buildChain: (id: string) => void
 }
 
 interface InspectorProps {
@@ -45,7 +48,15 @@ export function Inspector({ plan, result, catalog, selection, actions, isRecipeH
     if (!node) return null
     return (
       <aside className="pn-inspector nowheel">
-        <NodeInspector key={node.id} node={node} result={result} catalog={catalog} actions={actions} isRecipeHidden={isRecipeHidden} />
+        <NodeInspector
+          key={node.id}
+          node={node}
+          open={openInputs(plan, catalog, { node: node.id }).length}
+          result={result}
+          catalog={catalog}
+          actions={actions}
+          isRecipeHidden={isRecipeHidden}
+        />
       </aside>
     )
   }
@@ -116,12 +127,15 @@ function ClockField({ value, min, max, onChange }: { value: number; min: number;
 
 function NodeInspector({
   node,
+  open,
   result,
   catalog,
   actions,
   isRecipeHidden,
 }: {
   node: PlanNode
+  /** Inputs with no belt yet. */
+  open: number
   result: SolveResult
   catalog: Catalog
   actions: InspectorActions
@@ -131,6 +145,17 @@ function NodeInspector({
   return (
     <>
       <h3>{nodeLabel(node, catalog)}</h3>
+      {open > 0 && (
+        <div className="pn-build">
+          <button type="button" className="pn-button" onClick={() => actions.buildChain(node.id)}>
+            ⚡ Build chain
+          </button>
+          <span className="pn-insp-hint">
+            {node.kind === 'goal' ? 'Adds everything this goal needs' : `Adds producers for ${open === 1 ? 'the missing input' : `the ${open} missing inputs`}`},
+            back to raw resources.
+          </span>
+        </div>
+      )}
       {node.kind === 'recipe' && (
         <RecipeFields node={node} res={res} catalog={catalog} actions={actions} isRecipeHidden={isRecipeHidden} />
       )}

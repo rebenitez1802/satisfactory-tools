@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import type { Catalog, ItemId } from '../../catalog'
-import { duplicateNodes, newNodeId, removeNodes, setRecipe, solvePlan, updateNode, validatePlan } from '../../planner'
+import { duplicateNodes, newNodeId, openInputs, removeNodes, setRecipe, solvePlan, updateNode, validatePlan } from '../../planner'
 import type { Plan, PlanEdge, PlanNode, PlanSettings } from '../../planner'
 import { AlternatesModal } from './AlternatesModal'
 import { BalancerPopup } from './BalancerPopup'
 import { CatalogProvider, useCatalog, useCatalogState } from './catalogContext'
 import { Inspector, type InspectorActions } from './Inspector'
-import { PlanCanvas } from './PlanCanvas'
+import { PlanCanvas, type CanvasApi } from './PlanCanvas'
 import { PlanMenu } from './PlanMenu'
 import { PlanTabs } from './PlanTabs'
 import { PlannerContext, type PlannerContextValue } from './plannerContext'
 import { PlanSummary } from './PlanSummary'
 import { samplePlan } from './samplePlan'
-import { downloadPlan, loadPrefs, loadStore, newPlanId, savePrefs, saveStore, type PlanStore } from './storage'
+import { downloadPlan, loadPrefs, loadStore, newPlanId, savePrefs, saveStore, type PlanStore, type Prefs } from './storage'
 import { useHistory } from './useHistory'
 import './planner.css'
 
@@ -85,6 +85,15 @@ function Planner() {
   const [prefs, setPrefs] = useState(loadPrefs)
   const locked = useMemo(() => new Set(prefs.lockedAlternates), [prefs])
   const isRecipeHidden = useCallback((id: string) => locked.has(id), [locked])
+  useEffect(() => savePrefs(prefs), [prefs])
+  const updatePrefs = useCallback((patch: Partial<Prefs>) => setPrefs((p) => ({ ...p, ...patch })), [])
+  const rememberRecipe = useCallback(
+    (item: ItemId, recipe: string) =>
+      setPrefs((p) => (p.preferredRecipes[item] === recipe ? p : { ...p, preferredRecipes: { ...p.preferredRecipes, [item]: recipe } })),
+    [],
+  )
+  const build = useMemo(() => ({ preferred: prefs.preferredRecipes, reuse: prefs.buildReuse }), [prefs])
+  const canvas = useRef<CanvasApi | null>(null)
 
   const result = useMemo(() => solvePlan(plan, catalog), [plan, catalog])
 
@@ -222,14 +231,21 @@ function Planner() {
   const actions: InspectorActions = useMemo(
     () => ({
       update,
-      setRecipe: (id, recipeId) => setPlan((p) => setRecipe(p, id, recipeId, catalog)),
+      setRecipe: (id, recipeId) => {
+        // Switching how a node makes its product is remembered for ⚡ Build chain.
+        const recipe = catalog.recipes.get(recipeId)
+        const gen = recipe && catalog.machines.get(recipe.machines[0])?.generation
+        if (recipe?.outputs[0] && !gen) rememberRecipe(recipe.outputs[0].item, recipeId)
+        setPlan((p) => setRecipe(p, id, recipeId, catalog))
+      },
       updateEdge: (id: string, patch: Partial<PlanEdge>) =>
         setPlan((p) => ({ ...p, edges: p.edges.map((e) => (e.id === id ? { ...e, ...patch } : e)) }), `edge:${id}`),
       removeNodes: (ids) => setPlan((p) => removeNodes(p, ids)),
       removeEdges: (ids) => setPlan((p) => ({ ...p, edges: p.edges.filter((e) => !ids.includes(e.id)) })),
       duplicate: (ids) => setPlan((p) => duplicateNodes(p, ids, newNodeId)),
+      buildChain: (id) => canvas.current?.buildChain(openInputs(planRef.current, catalog, { node: id })),
     }),
-    [update, setPlan, catalog],
+    [update, setPlan, catalog, rememberRecipe],
   )
   const updateSettings = useCallback(
     (patch: Partial<PlanSettings>) => setPlan((p) => ({ ...p, settings: { ...p.settings, ...patch } })),
@@ -245,8 +261,10 @@ function Planner() {
       openSplit: (nodeId, item) => setOpenSplit({ nodeId, item }),
       isRecipeHidden,
       edgeStyle: prefs.edgeStyle,
+      build,
+      rememberRecipe,
     }),
-    [catalog, result, plan.settings, update, isRecipeHidden, prefs.edgeStyle],
+    [catalog, result, plan.settings, update, isRecipeHidden, prefs.edgeStyle, build, rememberRecipe],
   )
   const split = openSplit && result.splits.find((s) => s.node === openSplit.nodeId && s.item === openSplit.item)
   const alternateCount = [...catalog.recipes.values()].filter((r) => r.alternate).length
@@ -288,16 +306,15 @@ function Planner() {
             alternates={`${alternateCount - [...locked].filter((id) => catalog.recipes.has(id)).length} of ${alternateCount} unlocked`}
             onEditAlternates={() => setShowAlternates(true)}
             edgeStyle={prefs.edgeStyle}
-            onEdgeStyle={(edgeStyle) => {
-              const p = { ...prefs, edgeStyle }
-              setPrefs(p)
-              savePrefs(p)
-            }}
+            onEdgeStyle={(edgeStyle) => updatePrefs({ edgeStyle })}
+            buildReuse={prefs.buildReuse}
+            onBuildReuse={(buildReuse) => updatePrefs({ buildReuse })}
+            onBuild={(item) => canvas.current?.buildChain(openInputs(plan, catalog, { item }))}
           />
         </section>
         <section className="panel graph-panel pn-graph-panel">
           <ReactFlowProvider key={canvasKey}>
-            <PlanCanvas plan={plan} setPlan={setPlan} result={result} onSelectionChange={setSelection} />
+            <PlanCanvas plan={plan} setPlan={setPlan} result={result} onSelectionChange={setSelection} apiRef={canvas} />
           </ReactFlowProvider>
           <Inspector
             plan={plan}
@@ -325,11 +342,7 @@ function Planner() {
         <AlternatesModal
           catalog={catalog}
           locked={locked}
-          onChange={(next) => {
-            const p = { ...prefs, lockedAlternates: [...next] }
-            setPrefs(p)
-            savePrefs(p)
-          }}
+          onChange={(next) => updatePrefs({ lockedAlternates: [...next] })}
           onClose={() => setShowAlternates(false)}
         />
       )}

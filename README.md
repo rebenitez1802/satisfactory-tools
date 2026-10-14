@@ -61,6 +61,11 @@ overclocking, Somersloops and power. Set 🎯 targets on goals and ⛔ limits on
 sources or machine groups, and everything else sizes itself. It works forward
 ("what can I make from this?"), backward ("what do I need?"), or both.
 
+**⚡ Build chain** turns a goal, or any input with no belt yet, into a complete
+chain down to raw resources in one click: standard recipes (or the one you
+picked last time for that item), miners and extractors, laid out and ready to
+refine.
+
 Power plants are part of the plan: coal, fuel, biomass and nuclear generators
 take a 🎯 MW target or burn all the fuel they can get, and the summary shows
 power used, made and the net. Spare byproducts flow on into the chains they

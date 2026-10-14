@@ -1,4 +1,4 @@
-import type { Catalog } from '../../catalog'
+import type { Catalog, ItemId } from '../../catalog'
 import type { ItemRate, MachineMode, Plan, PlanSettings, SolveResult } from '../../planner'
 import { fmt, mw, pct } from './format'
 import { Icon } from './Icon'
@@ -15,6 +15,9 @@ export function PlanSummary({
   onEditAlternates,
   edgeStyle,
   onEdgeStyle,
+  buildReuse,
+  onBuildReuse,
+  onBuild,
 }: {
   plan: Plan
   result: SolveResult
@@ -25,6 +28,10 @@ export function PlanSummary({
   onEditAlternates: () => void
   edgeStyle: EdgeStyle
   onEdgeStyle: (style: EdgeStyle) => void
+  buildReuse: boolean
+  onBuildReuse: (reuse: boolean) => void
+  /** ⚡ Build chain for every unconnected input of an item, or of every item. */
+  onBuild: (item?: ItemId) => void
 }) {
   const { totals } = result
   const net = totals.generatedMw - totals.powerMw
@@ -128,7 +135,20 @@ export function PlanSummary({
 
       <Rates title="Resources in" rates={totals.rawResources} catalog={catalog} />
       <Rates title="Spare output" rates={totals.surplus} catalog={catalog} tone="warn" />
-      <Rates title="Missing inputs" rates={totals.missingInputs} catalog={catalog} tone="bad" />
+      <Rates
+        title="Missing inputs"
+        rates={totals.missingInputs}
+        catalog={catalog}
+        tone="bad"
+        onBuild={onBuild}
+        action={
+          totals.missingInputs.length > 1 && (
+            <button type="button" className="pn-build-all" onClick={() => onBuild()} title="Build chains for every missing input, back to raw resources">
+              ⚡ Build all
+            </button>
+          )
+        }
+      />
 
       {result.diagnostics.length > 0 && (
         <div className="warnings">
@@ -201,6 +221,21 @@ export function PlanSummary({
           </div>
         </div>
         <div className="field">
+          <span>⚡ Build chain</span>
+          <div className="seg seg-full">
+            {(
+              [
+                [true, 'Reuse existing nodes'],
+                [false, 'Always add new'],
+              ] as [boolean, string][]
+            ).map(([reuse, label]) => (
+              <button key={label} type="button" className={buildReuse === reuse ? 'active' : ''} onClick={() => onBuildReuse(reuse)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="field">
           <span>Alternate recipes</span>
           <button type="button" className="pn-button pn-button-quiet pn-button-inline" onClick={onEditAlternates}>
             {alternates} · choose…
@@ -211,10 +246,13 @@ export function PlanSummary({
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="pn-section">
-      <h4>{title}</h4>
+      <h4>
+        {title}
+        {action}
+      </h4>
       {children}
     </div>
   )
@@ -230,10 +268,25 @@ function Row({ icon, label, children }: { icon: React.ReactNode; label: string; 
   )
 }
 
-function Rates({ title, rates, catalog, tone }: { title: string; rates: ItemRate[]; catalog: Catalog; tone?: 'warn' | 'bad' }) {
+function Rates({
+  title,
+  rates,
+  catalog,
+  tone,
+  action,
+  onBuild,
+}: {
+  title: string
+  rates: ItemRate[]
+  catalog: Catalog
+  tone?: 'warn' | 'bad'
+  action?: React.ReactNode
+  /** Adds a ⚡ button per row. */
+  onBuild?: (item: ItemId) => void
+}) {
   if (!rates.length) return null
   return (
-    <Section title={title}>
+    <Section title={title} action={action}>
       {rates.map((r) => {
         const item = catalog.items.get(r.item)
         return (
@@ -242,6 +295,17 @@ function Rates({ title, rates, catalog, tone }: { title: string; rates: ItemRate
               {fmt(r.perMin)}
               {item && item.form !== 'solid' ? ' m³' : ''}/min
             </span>
+            {onBuild && (
+              <button
+                type="button"
+                className="pn-build-row"
+                onClick={() => onBuild(r.item)}
+                title={`Build chain: ${item?.name ?? 'this item'} and everything it needs, back to raw resources`}
+                aria-label={`Build chain for ${item?.name ?? r.item}`}
+              >
+                ⚡
+              </button>
+            )}
           </Row>
         )
       })}
