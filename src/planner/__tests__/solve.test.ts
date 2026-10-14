@@ -86,6 +86,9 @@ describe('solver', () => {
     expect(r.goals).toEqual([{ id: '~open:smelt', item: `base:${INGOT}`, requested: 'max', achieved: 240, openEndOf: 'smelt' }])
     expect(r.edges.size).toBe(1)
     expect([...r.nodes.keys()]).toEqual(['ore', 'smelt'])
+    // Its output has no real belt, though the open end uses all of it.
+    expect(r.nodes.get('smelt')!.outputs[0]).toMatchObject({ produced: 240, used: 240, connected: false })
+    expect(r.nodes.get('ore')!.outputs[0]).toMatchObject({ connected: true })
     expect(r.totals.delivered).toEqual([{ item: `base:${INGOT}`, perMin: 240 }])
   })
 

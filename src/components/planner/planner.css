@@ -169,6 +169,24 @@
 .pn-port-spare .icon {
   box-shadow: 0 0 0 2px #f59e0b;
 }
+/* A port with no belt yet shows its rate under the item. */
+.pn-port-rated {
+  flex-direction: column;
+  height: auto;
+}
+.pn-port-rate {
+  font-size: 10px;
+  line-height: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.pn-port-in .pn-port-rate {
+  color: var(--red);
+}
+.pn-port-out .pn-port-rate {
+  color: #f59e0b;
+}
 .pn-port-mark {
   position: absolute;
   bottom: -2px;
@@ -235,6 +253,11 @@
 }
 .pn-port-in::before {
   left: -6px;
+}
+/* Keep the edge dot level with the item, not the item plus its rate. */
+.pn-port-rated::before,
+.pn-port-rated::after {
+  top: 15px;
 }
 .pn-port-out::after {
   right: -6px;
@@ -704,6 +727,10 @@
 .pn-toolbar .pn-button-quiet {
   width: auto;
   margin-top: 0;
+}
+.pn-toolbar .pn-button:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 .pn-empty {
   margin-top: 120px;

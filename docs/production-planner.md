@@ -87,6 +87,10 @@ Known v1 simplifications (Option 3 lifts them):
   Limited nodes keep your count and run at the clock they need.
 - **Ports** show needed vs supplied. Unconnected inputs are listed as missing
   inputs: things to import. Outputs show surplus.
+  - A port with no belt yet shows its rate under the item: red for what an
+    input needs, amber for what an output makes. Once a belt is connected,
+    the rate moves to the belt label. An open end's output counts as having
+    no belt, even though the solver treats its flow as used.
 - **Edges** show rate and item. They warn when over the selected belt or pipe
   tier.
 - **Splits and merges:** an output port feeding several edges gets a splitter
@@ -115,8 +119,30 @@ Known v1 simplifications (Option 3 lifts them):
 - **Editing:** select a node to edit it in the inspector. The recipe picker
   shows ingredient and product icons with per-machine rates. Somersloops are a
   single "Amplify ×2" toggle, with partly filled slots behind "Partial…".
+- **Tidy layout** (canvas toolbar) arranges the plan left to right, from
+  resources to goals, as one undo step, then fits the view. With two or more
+  nodes selected it becomes **Tidy selection** and moves only those. The
+  rules (`layoutPlan` in `src/planner/layout.ts`, built on dagre):
+  - Columns follow the belts. Each node sits as far left as its inputs
+    allow, and moves right only if that shortens its belts, so a resource
+    node sits just before its first consumer. Goals and other ends of the
+    line share the last column, so no goal sits in the way of a belt.
+  - Separate chains are stacked top to bottom in their current order.
+  - In a loop (packaging, recycling) only the belt that closes it runs
+    backwards. A backwards belt between cards on the same row is drawn
+    underneath them.
+  - A tidied selection is anchored to the outside node it has the most belts
+    with (a consumer, on a tie). With no such node it keeps its top-left
+    corner. Either way it moves down past any card it would cover.
+  - Angled belts turn just before their consumer, so a belt that skips a
+    column runs past it instead of under a card.
+- **Zoom:** fitting the view (on load, after Tidy, the fit button) never goes
+  below 55%, so cards stay readable; a plan too big for that stays centered
+  and scrolls. Zooming out by hand stops at 30%. **F**, or the target button
+  under the zoom controls, zooms to the selected nodes, or to the whole plan
+  if nothing is selected.
 - **Shortcuts:** ⌘/Ctrl + C, V, D (with the belts between copied nodes),
-  ⌘/Ctrl + Z / Shift+Z, Delete.
+  ⌘/Ctrl + Z / Shift+Z, Delete, F (zoom to selection).
 - **Preferences** apply to every plan: unlocked alternates, and belt line
   style (angled, straight or curved).
 
