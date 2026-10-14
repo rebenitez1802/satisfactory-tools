@@ -130,8 +130,8 @@ Ficsonium** plants with no waste left.
 A node is sized by the output it is run for; its other outputs are
 byproducts (a recipe's second output, or all of a generator's outputs).
 
-- **Spare byproducts flow on.** When a byproduct's maker has an anchor in its
-  own part of the plan (a goal or a powered generator upstream of it, or the
+- **Spare byproducts flow on.** When a byproduct's maker has an anchor to
+  run for (a goal or a powered generator down its main products, or the
   maker itself), the belts carrying that byproduct get **what is spare** and
   no more:
   - A chain fed only by the byproduct fills from it by itself, through the
@@ -144,14 +144,26 @@ byproducts (a recipe's second output, or all of a generator's outputs).
     over-make its main product); add another producer of the byproduct.
   - Where an input is fed by a spare byproduct and by other producers, the
     byproduct is used first and the others make up the rest.
+  - Several consumers of one spare byproduct share it like Max goals share
+    a limit, whether or not they are connected to each other: uranium waste
+    belted to both a Blender and a Particle Accelerator splits between them.
+  - The byproduct's chain may share nodes with its maker's chain: one Water
+    Extractor group for the reactors and the waste chain, or an Iron Plate
+    line feeding both. Shared flexible nodes grow to cover both. A shared
+    ⛔ limited node serves the maker's chain first, and the byproduct's
+    chain gets what is left (it is the bottleneck when nothing is).
 - **Otherwise byproducts are pulled** like main products. A maker with
   nothing else to run for (its main output unconnected, or no goal around
   it) is sized by demand for its byproduct.
 - Technically the solver cuts the plan at those byproduct belts into
   *stages*, solves them makers first, and hands each stage the spare as a
-  limited supply. Byproduct belts that loop back into their maker's own
-  chain stay pulled (e.g. Ficsonium Fuel Rod's Dark Matter Residue feeding
-  the Ficsonium that makes it).
+  limited supply. A node's stage is the number of cut belts on its longest
+  way in. Each stage also takes in the nodes upstream of it from earlier
+  stages, adding its demand to theirs, with only the room their limits have
+  left. Byproduct belts that loop back into their maker's own chain stay
+  pulled (e.g. Ficsonium Fuel Rod's Dark Matter Residue feeding the
+  Ficsonium that makes it, or Fertile Uranium's water piped to the acids
+  that feed it).
 
 ## Presentation
 
