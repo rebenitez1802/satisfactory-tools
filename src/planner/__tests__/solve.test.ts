@@ -39,10 +39,10 @@ describe('targets and limits (spec examples)', () => {
     expect(r.nodes.get('ore')!.activity).toBeCloseTo(180)
     expect(r.nodes.get('smelt')!.setup!.count).toBeCloseTo(6)
     expect(r.nodes.get('plate')!.setup!.count).toBeCloseTo(6)
-    // The configured site gives 90, so a flexible miner reports it needs twice that.
-    expect(r.nodes.get('ore')!.utilization).toBeCloseTo(2)
+    // One site at 150% gives 90, so a flexible miner needs two of them.
+    expect(r.nodes.get('ore')!.setup).toMatchObject({ count: expect.closeTo(2), clock: 1.5 })
     expect(r.nodes.get('ore')!.bottleneck).toBe(false)
-    expect(r.diagnostics.map((d) => d.nodeId)).toEqual(['ore'])
+    expect(r.diagnostics).toEqual([])
   })
 
   it('mixed: the limit is the bottleneck', () => {
@@ -254,8 +254,8 @@ describe('solver', () => {
   it('estimates power and buildings', () => {
     const miner = extractorNode('ore', 'Build_MinerMk2_C', ORE, [{ purity: 'base:normal', count: 1 }])
     const r = ironChain(miner, 60)
-    // Miner runs at 75% (90 of 120), 3 Smelters, 3 Constructors.
-    expect(r.nodes.get('ore')!.clock).toBeCloseTo(0.75)
+    // 0.75 of a miner (90 of 120), 3 Smelters, 3 Constructors.
+    expect(r.nodes.get('ore')!.setup!.count).toBeCloseTo(0.75)
     expect(r.totals.powerMw).toBeCloseTo(15 * 0.75 ** 1.321929 + 3 * 4 + 3 * 4)
     expect(r.totals.machines.get('base:Build_SmelterMk1_C')).toBeCloseTo(3)
     expect(r.totals.rawResources).toEqual([{ item: `base:${ORE}`, perMin: expect.closeTo(90) }])
@@ -305,9 +305,9 @@ describe('solver', () => {
   })
 })
 
-describe('water extractors', () => {
-  // Water extractors go on any water, so a flexible group adds extractors
-  // instead of overclocking the one it was created with.
+describe('flexible extractors', () => {
+  // A flexible group adds extractors (resource nodes, or water) instead of
+  // overclocking the one it was created with.
   const PUMP = 'Build_WaterPump_C'
   const water = (o = {}) => extractorNode('water', PUMP, 'Desc_Water_C', [{ purity: 'base:normal', count: 1 }], o)
   const pumps = (source: PlanNode, target: number | 'max', settings?: Plan['settings']) =>
@@ -346,11 +346,35 @@ describe('water extractors', () => {
     expect(n.capacity).toBeCloseTo(240)
   })
 
-  it('miners still need the nodes they are on', () => {
-    const r = ironChain(extractorNode('ore', 'Build_MinerMk1_C', ORE, [{ purity: 'base:normal', count: 1 }]), 120)
-    expect(r.nodes.get('ore')!.clock).toBeCloseTo(3)
-    expect(r.nodes.get('ore')!.setup).toBeUndefined()
-    expect(r.diagnostics).toEqual([expect.objectContaining({ nodeId: 'ore', message: 'Needs more resource nodes than configured.' })])
+  it('counts miner nodes of the chosen purity', () => {
+    // 180 ore/min: 3 normal Mk.1 nodes at 100%, or 1.5 pure ones.
+    const miner = (purity: string, o = {}) => extractorNode('ore', 'Build_MinerMk1_C', ORE, [{ purity: `base:${purity}`, count: 1 }], o)
+    const r = ironChain(miner('normal'), 120)
+    expect(r.nodes.get('ore')!.setup).toMatchObject({ count: expect.closeTo(3), clock: 1, feasible: true })
+    expect(r.nodes.get('ore')!.clock).toBeUndefined()
+    expect(r.diagnostics).toEqual([])
+    expect(r.totals.machines.get('base:Build_MinerMk1_C')).toBeCloseTo(3)
+    expect(ironChain(miner('pure'), 120).nodes.get('ore')!.setup!.count).toBeCloseTo(1.5)
+    const whole = ironChain(miner('pure', { clock: 2.5 }), 120, { plan: { settings: { machineMode: 'underclock' } } })
+    expect(whole.nodes.get('ore')!.setup).toMatchObject({ count: 1, clock: expect.closeTo(1.5), shards: 1 })
+  })
+
+  it('a mixed flexible group counts in its average purity', () => {
+    const sites = [
+      { purity: 'base:impure', count: 1 },
+      { purity: 'base:pure', count: 1 },
+    ]
+    // Impure 30 + pure 120 → 75 per Mk.1 node; 180 ore/min is 2.4 nodes.
+    const r = ironChain(extractorNode('ore', 'Build_MinerMk1_C', ORE, sites), 120)
+    expect(r.nodes.get('ore')!.setup!.count).toBeCloseTo(2.4)
+  })
+
+  it('resource wells count satellites and power the pressurizer once', () => {
+    const well = extractorNode('oil', 'Build_FrackingExtractor_C', 'Desc_LiquidOil_C', [{ purity: 'base:normal', count: 1 }])
+    const r = solvePlan(plan([well, goalNode('goal', 'Desc_LiquidOil_C', 180)], [['oil', 'goal', 'Desc_LiquidOil_C']]), catalog)
+    expect(r.nodes.get('oil')!.setup!.count).toBeCloseTo(3)
+    expect(r.totals.machines.get('base:Build_FrackingSmasher_C')).toBe(1)
+    expect(r.totals.powerMw).toBeCloseTo(machine('Build_FrackingSmasher_C').powerMw)
   })
 })
 

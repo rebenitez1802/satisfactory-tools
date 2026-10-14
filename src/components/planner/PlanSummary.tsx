@@ -164,7 +164,7 @@ export function PlanSummary({
           <label className="field">
             <span>Belt limit</span>
             <select value={plan.settings.beltTier ?? ''} onChange={(e) => updateSettings({ beltTier: e.target.value || undefined })}>
-              <option value="">None</option>
+              <option value="">No limit</option>
               {belts.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name.replace('Conveyor Belt ', '')} · {t.ratePerMin}
@@ -175,7 +175,7 @@ export function PlanSummary({
           <label className="field">
             <span>Pipe limit</span>
             <select value={plan.settings.pipeTier ?? ''} onChange={(e) => updateSettings({ pipeTier: e.target.value || undefined })}>
-              <option value="">None</option>
+              <option value="">No limit</option>
               {pipes.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name.replace('Pipeline ', '')} · {t.ratePerMin}

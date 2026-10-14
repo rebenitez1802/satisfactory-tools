@@ -45,13 +45,15 @@ never overwrites them.
 
 - A flexible recipe node keeps your clock and Somersloops as preferences, and
   its machine count is derived.
-- A flexible extractor or supply shows what it needs to provide. Extractors
-  on resource nodes run their configured nodes at whatever clock that takes,
-  and warn when it is past the maximum: more nodes are needed. Extractors
-  that can be built anywhere (Water Extractors) are sized like recipe
-  machines instead: 900 m³/min of water is 7.5 extractors at the preferred
-  clock (or 8 at 93.75% in whole-machine mode), never one at 750%. A ⛔
-  limited group of them keeps its extractor count as the limit.
+- A flexible supply shows what it needs to provide.
+- A flexible extractor is sized like a recipe node: it shows how many
+  resource nodes (or Water Extractors) it needs, at the preferred clock, and
+  never overclocks past the maximum. 180 iron ore/min on Mk.1 miners is 3
+  normal nodes at 100% (1.5 pure ones); 900 m³/min of water is 7.5 Water
+  Extractors (or 8 at 93.75% in whole-machine mode). You pick the purity;
+  mixed purities need ⛔ Limit, where the nodes you list are what you have.
+  A flexible group saved with mixed purities counts in their average.
+  Resource wells count satellites, plus one pressurizer.
 
 The calculation, per connected chain:
 
@@ -163,7 +165,7 @@ byproducts (a recipe's second output, or all of a generator's outputs).
     the rate moves to the belt label. An open end's output counts as having
     no belt, even though the solver treats its flow as used.
 - **Edges** show rate and item. They warn when over the selected belt or pipe
-  tier. Both limits are off (None) by default, in new plans and the sample.
+  tier. Both are set to **No limit** by default, in new plans and the sample.
 - **Splits and merges:** an output port feeding several edges gets a splitter
   badge. Clicking it opens a read-only load-balancer popup for those rates, with
   surplus as the leftover output, plus "Open in Load Balancer". Inputs fed by

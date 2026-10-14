@@ -34,8 +34,8 @@ import {
   extractorRate,
   generatedMw,
   groupPowerMw,
+  machinePowerMw,
   machineSetup,
-  maxClock,
   outputMultiplier,
   shardsNeeded,
 } from './rates'
@@ -71,11 +71,11 @@ export interface NodeResult {
   inputs: InputPort[]
   outputs: OutputPort[]
   /**
-   * Recipe nodes, and flexible extractors that can be built anywhere (water):
-   * machines and clock as they'd be built.
+   * Recipe nodes, and flexible extractor nodes: machines (one per resource
+   * node) and clock as they'd be built.
    */
   setup?: MachineSetup
-  /** Extractor nodes: the clock the extractors actually need to run at. */
+  /** Limited extractor nodes: the clock the extractors actually need to run at. */
   clock?: number
   /** Power drawn, in MW. */
   powerMw: number
@@ -88,10 +88,7 @@ export interface NodeResult {
    * configured, whether or not anything downstream uses it yet.
    */
   capacity?: number
-  /**
-   * activity / limit for limited nodes. For flexible extractors it is relative
-   * to what the configured sites give, so > 1 means more sites are needed.
-   */
+  /** activity / limit for limited nodes. */
   utilization?: number
   bottleneck: boolean
 }
@@ -178,11 +175,12 @@ interface Unit {
   limit?: number
   recipe?: Recipe
   machine?: Machine
-  /** Extractors: output of the configured sites at the configured clock. */
+  /** Limited extractors: output of the configured sites at the configured clock. */
   configured?: number
   /**
-   * Flexible extractors that can be built anywhere: output of one at 100%.
-   * They are sized like machines instead of overclocking the configured sites.
+   * Flexible extractors: output of one at 100% on one site. They are sized
+   * like machines, more sites at the preferred clock, instead of overclocking
+   * the configured ones.
    */
   perExtractor?: number
   /** Outputs the node isn't run for: a recipe's extra outputs, a generator's waste. */
@@ -233,14 +231,18 @@ function unitOf(node: PlanNode, catalog: Catalog): Unit | undefined {
       const machine = catalog.machines.get(node.machine)
       if (!machine?.extraction || !catalog.items.has(node.resource)) return undefined
       const configured = extractorRate(machine, node, catalog.purities)
-      const anywhere = machine.extraction.anywhere && !node.limited
+      // A flexible group's sites only say which purity to count in; a mixed
+      // group (saved before mixing needed a limit) counts in its average.
+      const sites = node.sites.reduce((s, x) => s + x.count, 0)
+      const one = sites > 0 ? node.sites : [{ purity: '', count: 1 }]
+      const perExtractor = extractorRate(machine, { ...node, sites: one, clock: 1 }, catalog.purities) / Math.max(1, sites)
       return {
         inputs: new Map(),
         outputs: new Map([[node.resource, 1]]),
         limit: node.limited ? configured : undefined,
         machine,
-        configured: anywhere ? undefined : configured,
-        perExtractor: anywhere ? machine.extraction.ratePerMin * outputMultiplier(machine, node.sloops) : undefined,
+        configured: node.limited ? configured : undefined,
+        perExtractor: node.limited ? undefined : perExtractor,
         byproducts: NONE,
       }
     }
@@ -770,23 +772,26 @@ function assemble(
         })
       }
     } else if (n.kind === 'extractor' && unit.machine && unit.perExtractor !== undefined) {
-      // As many extractors as the demand needs, like a flexible recipe node.
+      // As many sites as the demand needs, like a flexible recipe node.
       const setup = machineSetup(unit.machine, unit.perExtractor > EPS ? a / unit.perExtractor : 0, mode, { clock: n.clock })
       res.setup = setup
-      res.powerMw = groupPowerMw(unit.machine, setup.count, setup.clock, n.sloops)
+      const by = unit.machine.extraction?.poweredBy
+      const driver = by ? catalog.machines.get(by) : undefined
+      res.powerMw = groupPowerMw(unit.machine, setup.count, setup.clock, n.sloops) + (driver && a > EPS ? machinePowerMw(driver, setup.clock) : 0)
       if (setup.count > EPS) {
         machines.set(unit.machine.id, (machines.get(unit.machine.id) ?? 0) + setup.count)
+        if (by) machines.set(by, (machines.get(by) ?? 0) + 1)
         const built = Math.ceil(setup.count - EPS)
         shards += setup.shards * built
         sloops += Math.min(n.sloops, unit.machine.amplifier?.slots ?? 0) * built
       }
       add(raw, n.resource, a)
     } else if (n.kind === 'extractor' && unit.machine) {
+      // Limited: the configured sites, at the clock the demand needs (≤ theirs).
       const configured = unit.configured ?? 0
       const clock = configured > EPS ? (n.clock * a) / configured : 0
       res.clock = clock
       res.capacity = configured
-      if (!n.limited && configured > EPS) res.utilization = a / configured
       const by = unit.machine.extraction?.poweredBy
       res.powerMw = a > EPS ? extractorPowerMw(unit.machine, { ...n, clock }, by ? catalog.machines.get(by) : undefined) : 0
       const sites = n.sites.reduce((s, x) => s + x.count, 0)
@@ -795,9 +800,6 @@ function assemble(
         if (by) machines.set(by, (machines.get(by) ?? 0) + 1)
         shards += shardsNeeded(unit.machine, clock) * sites
         sloops += Math.min(n.sloops, unit.machine.amplifier?.slots ?? 0) * sites
-      }
-      if (clock > maxClock(unit.machine) + EPS) {
-        diagnostics.push({ severity: 'warning', nodeId: n.id, message: 'Needs more resource nodes than configured.' })
       }
       add(raw, n.resource, a)
     } else if (n.kind === 'supply') {

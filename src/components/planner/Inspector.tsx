@@ -142,7 +142,7 @@ function NodeInspector({
         <div className="pn-insp-result">
           {res.capacity !== undefined && (
             <div className="pn-insp-big">
-              {node.kind === 'extractor' && !node.limited ? 'These nodes give' : 'Produces up to'} <strong>{fmt(res.capacity)}/min</strong>
+              Produces up to <strong>{fmt(res.capacity)}/min</strong>
             </div>
           )}
           {res.capacity !== undefined && <div>Used downstream: {fmt(res.activity)}/min</div>}
@@ -160,7 +160,7 @@ function NodeInspector({
           ) : (
             node.kind !== 'supply' && <div>⚡ {mw(res.powerMw)}</div>
           )}
-          {res.utilization !== undefined && <div>Using {pct(res.utilization)}{res.limit !== undefined ? ' of its limit' : ' of configured nodes'}</div>}
+          {res.utilization !== undefined && <div>Using {pct(res.utilization)} of its limit</div>}
           {res.bottleneck && <div className="pn-bad">Bottleneck: this limit caps the chain.</div>}
         </div>
       )}
@@ -339,8 +339,8 @@ function ExtractorFields({ node, catalog, actions }: { node: ExtractorNode; cata
   const setSingle = (p: string, count: number) => actions.update(node.id, { sites: count > 0 ? [{ purity: p, count }] : [] })
   const slots = sloopSlots(machine)
   const what = spec.anywhere ? 'extractor' : spec.poweredBy ? 'satellite node' : 'node'
-  // Built anywhere (water): a flexible group sizes its own count.
-  const autoCount = spec.anywhere && !node.limited
+  // A flexible group sizes its own count; only its purity is a choice.
+  const autoCount = !node.limited
 
   return (
     <>
@@ -370,7 +370,7 @@ function ExtractorFields({ node, catalog, actions }: { node: ExtractorNode; cata
           </select>
         )}
       </Field>
-      {spec.usesPurity && !mixed && (
+      {spec.usesPurity && (!mixed || autoCount) && (
         <Field label="Purity">
           <Seg value={purity} options={tiers.map((t): [string, string] => [t.id, t.name])} onChange={(p) => setSingle(p, Math.max(1, total))} />
         </Field>
@@ -412,7 +412,7 @@ function ExtractorFields({ node, catalog, actions }: { node: ExtractorNode; cata
           node.limited
             ? `What these ${what}s give at this clock is the limit.`
             : autoCount
-              ? 'Preferred clock: the extractor count adapts to it.'
+              ? `Preferred clock: the ${what} count adapts to it.`
               : undefined
         }
       >
