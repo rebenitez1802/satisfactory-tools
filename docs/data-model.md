@@ -22,7 +22,7 @@ scripts/                           build-time importers (not shipped)
      `extraction` spec for miners and extractors, or `generation` (MW made)
      for generators. `extraction.anywhere` marks extractors that aren't tied
      to resource nodes (the Water Extractor goes on any water), so any number
-     can be built.
+     can be built and the UI counts extractors rather than nodes.
    - Generators run recipes like any machine: one per fuel. A cycle burns one
      unit of fuel (1 item, or 1 m³ of a fluid fuel) for `energyMJ / MW`
      seconds; water and waste are per cycle. Generator recipes may have no

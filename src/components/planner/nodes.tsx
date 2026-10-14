@@ -233,23 +233,23 @@ function ExtractorCard({ data, selected }: NodeProps<PlanFlowNode>) {
     .filter((s) => s.count > 0)
     .map((s) => `${s.count}× ${usesPurity ? (catalog.purities.get(s.purity)?.name ?? '') : ''}`.trim())
     .join(', ')
-  const needsMore = !node.limited && (res.utilization ?? 0) > 1 + EPS
   const capacity = res.capacity ?? 0
-  // Extractors built anywhere (water) size their own count, like machines.
+  // Flexible groups size their own site count, like machines; limited ones
+  // keep the sites they have.
   const setup = res.setup
+  const purities = new Set(node.sites.filter((s) => s.count > 0).map((s) => s.purity))
+  const purity = usesPurity ? (purities.size > 1 ? 'mixed' : (catalog.purities.get([...purities][0] ?? '')?.name ?? '')) : ''
+  const count = setup && `${fmt(setup.count)}×${purity ? ` ${purity}` : ''}${Math.abs(setup.clock - 1) > EPS ? ` @ ${pct(setup.clock)}` : ''}`
   const tip = (
     setup
       ? [
-          `${resource.name} — ${fmt(setup.count)} × ${machine.name} @ ${pct(setup.clock)}`,
+          `${resource.name} — ${fmt(setup.count)} × ${machine.name}${purity ? ` on ${purity} nodes` : ''} @ ${pct(setup.clock)}`,
           `Supplies ${fmt(res.activity)}${unit(resource)} · ⚡ ${mw(res.powerMw)}`,
         ]
       : [
           `${resource.name} — ${machine.name} on ${sites || 'no'} node(s)`,
-          node.limited
-            ? `Produces up to ${fmt(capacity)}${unit(resource)}, using ${fmt(res.activity)}`
-            : `Supplies ${fmt(res.activity)}${unit(resource)} (these nodes give ${fmt(capacity)})`,
+          `Produces up to ${fmt(capacity)}${unit(resource)}, using ${fmt(res.activity)}`,
           `Runs @ ${pct(res.clock ?? 0)} · ⚡ ${mw(res.powerMw)}`,
-          needsMore ? `Needs ${pct(res.utilization!)} of these nodes` : '',
         ]
   )
     .concat(res.bottleneck ? 'Bottleneck' : '')
@@ -259,13 +259,11 @@ function ExtractorCard({ data, selected }: NodeProps<PlanFlowNode>) {
   return (
     <Card res={res} selected={selected} kind="extractor" tip={tip} badges={<LimitBadge on={node.limited} />}>
       <Icon of={machine} size={48} title={tip} />
-      <span className={`pn-big${needsMore ? ' pn-bad' : ''}`}>
+      <span className="pn-big">
         {fmt(node.limited ? capacity : res.activity)}
         <span className="pn-unit">{unit(resource)}</span>
       </span>
-      <span className="pn-small">
-        {setup ? `${fmt(setup.count)}×${Math.abs(setup.clock - 1) > EPS ? ` @ ${pct(setup.clock)}` : ''}` : sites}
-      </span>
+      <span className="pn-small">{count ?? sites}</span>
       {node.limited && res.activity < capacity - EPS && <span className="pn-small pn-warn">using {fmt(res.activity)}</span>}
       <Label node={node} />
     </Card>

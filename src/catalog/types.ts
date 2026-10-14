@@ -99,8 +99,8 @@ export interface ExtractionSpec {
   usesPurity: boolean
   /**
    * Built anywhere rather than on resource nodes (water extractors go on any
-   * water), so any number can be built. A flexible group is then sized like
-   * machines: more extractors at the preferred clock, not one overclocked.
+   * water), so any number can be built: the UI counts extractors, not nodes,
+   * and world node limits (roadmap #11) don't apply.
    */
   anywhere?: boolean
   /**
