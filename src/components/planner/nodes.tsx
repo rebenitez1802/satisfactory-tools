@@ -2,8 +2,8 @@
 // item) in the middle with its count, input items down the left edge and
 // output items down the right edge, each with its connection handle
 // (`in:<itemId>` / `out:<itemId>`) so belts only join matching items. Rates
-// live on the belts; everything else is in the hover tooltip and the
-// inspector.
+// live on the belts, or under the item while a port has no belt yet;
+// everything else is in the hover tooltip and the inspector.
 
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react'
 import type { ReactNode } from 'react'
@@ -43,8 +43,9 @@ function InPort({ nodeId, port }: { nodeId: string; port: InputPort }) {
     (port.connected ? ' — drag to move its belt to another node, or onto empty space to remove it.' : '') +
     (merge ? ` · ${merge.edges.length} belts merge here` : '')
   return (
-    <div className={`pn-port pn-port-in${missing ? ' pn-port-missing' : ''}${port.connected ? ' pn-port-connected' : ''}`}>
+    <div className={`pn-port pn-port-in${missing ? ' pn-port-missing pn-port-rated' : ''}${port.connected ? ' pn-port-connected' : ''}`}>
       <Icon of={item} size={24} title={tip} />
+      {missing && <span className="pn-port-rate">{fmt(port.needed)}</span>}
       {merge && <span className="pn-port-mark">⑃</span>}
       <Handle type="target" position={Position.Left} id={inHandle(port.item)} className={`pn-handle pn-${item.form}`} title={tip} />
     </div>
@@ -57,12 +58,17 @@ function OutPort({ nodeId, port, capacity }: { nodeId: string; port: OutputPort;
   // Sources with a fixed capacity: anything not used is spare too.
   const spare = Math.max(port.produced, capacity ?? 0) - port.used
   const split = result.splits.find((s) => s.node === nodeId && s.item === port.item)
+  // Nothing connected yet: show the rate on the card, not only in the
+  // tooltip. (An open end's output counts as used, so this isn't `spare`.)
+  const out = Math.max(port.produced, capacity ?? 0)
+  const loose = !port.connected && out > EPS
   const tip =
     `${item.name}: makes ${fmt(port.produced)}${unit(item)}${spare > EPS ? ` · ${fmt(spare)} spare` : ''}` +
     ' — drag onto a node to connect, or onto empty space to add a consumer.'
   return (
-    <div className={`pn-port pn-port-out${spare > EPS ? ' pn-port-spare' : ''}`}>
+    <div className={`pn-port pn-port-out${spare > EPS ? ' pn-port-spare' : ''}${loose ? ' pn-port-rated' : ''}`}>
       <Icon of={item} size={24} title={tip} />
+      {loose && <span className="pn-port-rate">{fmt(out)}</span>}
       <Handle type="source" position={Position.Right} id={outHandle(port.item)} className={`pn-handle pn-${item.form}`} title={tip} />
       {split && (
         <button

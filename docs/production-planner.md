@@ -87,6 +87,10 @@ Known v1 simplifications (Option 3 lifts them):
   Limited nodes keep your count and run at the clock they need.
 - **Ports** show needed vs supplied. Unconnected inputs are listed as missing
   inputs: things to import. Outputs show surplus.
+  - A port with no belt yet shows its rate under the item: red for what an
+    input needs, amber for what an output makes. Once a belt is connected,
+    the rate moves to the belt label. An open end's output counts as having
+    no belt, even though the solver treats its flow as used.
 - **Edges** show rate and item. They warn when over the selected belt or pipe
   tier.
 - **Splits and merges:** an output port feeding several edges gets a splitter
