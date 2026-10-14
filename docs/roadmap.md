@@ -37,6 +37,10 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | 19 | [Balancer with several inputs](#19-balancer-with-several-inputs) | M2 | Med–High | M | Planned, after #4 |
 | 20 | [Build cost](#20-build-cost) | M2 | Med–High | S–M | Done (PR #12) |
 | 21 | [Build checklist](#21-build-checklist) | M2 | High | S | Done (PR #12) |
+| 22 | [Resources to avoid](#22-resources-to-avoid) | M2 | High | S | Planned |
+| 23 | [Lock standard recipes](#23-lock-standard-recipes) | M2 | Medium | XS–S | Planned |
+| 24 | [Game progress](#24-game-progress) | M2 | High | M | Planned, after #23 |
+| 25 | [Byproduct makers shared between stages](#25-byproduct-makers-shared-between-stages) | M3 | Medium | M | Later |
 | — | [Mods and data tooling](#deferred-mods-and-data-tooling) | — | — | — | Deferred |
 
 When an item ships, change its status to **Done (PR #n)** and move its rules
@@ -58,9 +62,11 @@ and useful straight away while playing. Reorder freely.
 | 3 | Build in game | #21, #20 | Done (PR #12). |
 | 4 | Byproduct loops | #16 | Done (PR #15), without the LP: loops are solved with the spare-byproduct rule. Isolated because it changes rates. |
 | 5 | Optimize | #6, #11 | Done (PR #17), after a solver fix it needed (PR #16: byproducts feeding their maker's own goal). |
-| 6 | Real belts | #19, #18 | Both turn one logical flow into belts you can build, and share a helper that puts machines onto belts. Builds on #4's belt counts. |
-| 7 | Use leftovers | #17 | Builds on #2 (adding nodes) and #6 (ranking suggestions). |
+| 6 | Plan for your game | #22, #23, #24 | From the user's testing of #6 (2026-10-14): "build this without oil", and plan early in the game with only what's unlocked. #22 first (it covers the oil case alone), then #23, which #24 builds on. |
+| 7 | Real belts | #19, #18 | Both turn one logical flow into belts you can build, and share a helper that puts machines onto belts. Builds on #4's belt counts. |
+| 8 | Use leftovers | #17 | Builds on #2 (adding nodes) and #6 (ranking suggestions). |
 | any time | Small standalones | #9, #15, #14 | Independent; slot one in between the big ones. |
+| later | Solver | #25 | Changes rates, so its own PR. |
 | blocked | — | #10 | Waits on the user's rules. |
 
 ---
@@ -570,6 +576,67 @@ across several sessions. Asked for by the user on 2026-10-14. **Effort:** S.
 - **Tests:** edit helper tests (toggle, copy clears it), and a screenshot of
   done and not-done cards.
 
+### 22. Resources to avoid
+
+**Value:** "build this factory without oil". Today the only ways are locking
+every oil recipe (dozens, and locks apply to every plan) or setting Crude
+Oil to 0 in World nodes (meant to describe the map, not a wish).
+**Effort:** S.
+
+- **UX:** in the ✨ Optimize dialog, a "Don't use" row of resource chips
+  (the raw resources the program could mine). Picking one re-solves at once.
+  Saved per plan, since it's about this factory, not your game.
+- **Model:** `PlanSettings.avoid?: ItemId[]`, optional (old plans load).
+  In `optimize`, an avoided resource gets no new extractor column and no
+  import; the plan's own extractors and supplies of it still count (they
+  are what the player has; say so in the hint).
+- ⚡ Build chain should respect it too: `chooseProducer` skips recipes that
+  need an avoided resource when another way exists, and ends at a supply
+  node otherwise. Decide with the user whether Build chain reads the same
+  per-plan list.
+- When nothing can be made without it, the dialog says which resource
+  blocks which goal ("Plastic needs Crude Oil").
+- **Tests:** plates with oil alternates unlocked and Crude Oil avoided use
+  no oil; a goal that needs oil reports it.
+
+### 23. Lock standard recipes
+
+**Value:** turn off any recipe, not just alternates: "I don't want this
+one", and the building block for #24. **Effort:** XS–S.
+
+- The "Alternate recipes" dialog becomes "Recipes", with a Standard /
+  Alternate filter. `Prefs.lockedAlternates` becomes `lockedRecipes`;
+  `loadPrefs` migrates the old key.
+- Everything already goes through `isRecipeHidden` (pickers, recipe
+  dropdown, ⚡ Build chain, ✨ Optimize), so little else changes. A locked
+  recipe already in a plan keeps working and stays shown there.
+- `chooseProducer` already falls back from standard to alternates to a
+  supply node; check that ordering with locked standard recipes.
+
+### 24. Game progress
+
+**Value:** plan early in the game: ⚡ Build chain and ✨ Optimize only use what
+you've unlocked. **Effort:** M.
+
+- **Data:** greeny's `data1.0.json` (already our source) has `schematics`:
+  every milestone with its tier (0–9), MAM research, alternates' hard
+  drives, and the recipes each unlocks. E.g. *Oil Processing* is Tier 5 and
+  unlocks Plastic, Rubber, Fuel, Petroleum Coke and Circuit Board.
+  - Import them into the base pack as a new entity kind (`schematics`:
+    id, name, kind, tier, unlocked recipe ids), so mods can add their own.
+  - Skip customization and AWESOME Sink schematics.
+- **UX:** the Recipes dialog (#23) gets a "Game progress" header: pick your
+  tier ("Tier 4" unlocks Tiers 0–4), tick MAM research and alternates you
+  have. Per-recipe locks stay as overrides on top.
+- **Model:** prefs, not per plan (it's about your save): unlocked tier,
+  unlocked schematic ids, plus #23's recipe overrides. A recipe is usable
+  if a schematic unlocking it is unlocked (or it has none) and it isn't
+  locked by hand.
+- Buildings unlock with milestones too (the Refinery at Tier 5); machines
+  could be hidden the same way later.
+- **Tests:** at Tier 4, plastic isn't usable and Optimize says so; at
+  Tier 5 it is.
+
 ### 10. 1.2 power multiplier
 
 **Status:** blocked. The user will provide the exact rules (game option range
@@ -585,6 +652,24 @@ known.
 ---
 
 ## M3 — Nice to have
+
+### 25. Byproduct makers shared between stages
+
+**Value:** correctness, and cheaper optimized plans. **Effort:** M. Found
+while testing #6 (one uranium node feeding uranium and plutonium plants).
+
+- **What happens:** a byproduct maker that serves two stages (one Heavy Oil
+  Residue refinery for both the uranium and the plutonium chain) grows when
+  the later stage needs more of its main product, but only the earlier
+  stage's spare byproduct reaches the byproduct's consumer in the later
+  stage. Its extra polymer resin goes unused, and the consumer is short.
+- **Today:** ✨ Optimize works around it by adding another group of the
+  recipe for the rest (`optimize.ts`, after `topUpSpares`).
+- **Direction:** in `solvePlan`, a cut belt whose maker is borrowed by the
+  consuming stage should also carry what the maker makes for that stage,
+  as a spare belt inside it, on top of the earlier stage's spare.
+- **Done when:** the uranium + plutonium plan from the #6 tests needs no
+  extra groups, and its LP flows match the solver's.
 
 ### 11. World node limits
 
