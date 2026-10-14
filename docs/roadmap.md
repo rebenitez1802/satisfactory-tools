@@ -41,6 +41,7 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | 23 | [Lock standard recipes](#23-lock-standard-recipes) | M2 | Medium | XS–S | Done (PR #20) |
 | 24 | [Game progress](#24-game-progress) | M2 | High | M | Done (PR #20) |
 | 25 | [Byproduct makers shared between stages](#25-byproduct-makers-shared-between-stages) | M3 | Medium | M | Later |
+| 26 | [Game progress, finer](#26-game-progress-finer) | M3 | Low–Med | S | Later, after #24 |
 | — | [Mods and data tooling](#deferred-mods-and-data-tooling) | — | — | — | Deferred |
 
 When an item ships, change its status to **Done (PR #n)** and move its rules
@@ -55,6 +56,8 @@ them in this order. #19–#21 came from the user's testing of #2 on
 2026-10-14; "Build in game" goes before the solver work because it is small
 and useful straight away while playing. Reorder freely.
 
+**Next up (2026-10-14): order 7, Real belts (#19, #18).** Orders 1–6 are done.
+
 | Order | PR | Items | Why together |
 |---|---|---|---|
 | 1 | Build chain | #2 | Done (PR #9). #6 and #17 reuse its node-building helpers. |
@@ -66,7 +69,7 @@ and useful straight away while playing. Reorder freely.
 | 6b | Game progress | #23, #24 | Done (PR #20). Plan early in the game with only what's unlocked. Together because both reshape the Recipes dialog and prefs (one migration, `lockedAlternates` → `lockedRecipes` plus progress); #23 alone is mostly groundwork for #24. |
 | 7 | Real belts | #19, #18 | Both turn one logical flow into belts you can build, and share a helper that puts machines onto belts. Builds on #4's belt counts. |
 | 8 | Use leftovers | #17 | Builds on #2 (adding nodes) and #6 (ranking suggestions). |
-| any time | Small standalones | #9, #15, #14 | Independent; slot one in between the big ones. |
+| any time | Small standalones | #9, #15, #14, #26 | Independent; slot one in between the big ones. |
 | later | Solver | #25 | Changes rates, so its own PR. |
 | blocked | — | #10 | Waits on the user's rules. |
 
@@ -686,6 +689,24 @@ while testing #6 (one uranium node feeding uranium and plutonium plants).
   as a spare belt inside it, on top of the earlier stage's spare.
 - **Done when:** the uranium + plutonium plan from the #6 tests needs no
   extra groups, and its LP flows match the solver's.
+
+### 26. Game progress, finer
+
+**Value:** game progress (#24) that matches a save more closely, and says
+more. **Effort:** S. Found while building #24.
+
+- **Pick milestones, not just a tier.** Players unlock milestones out of
+  order; "Up to Tier 4" unlocks all of Tiers 0–4. Let the dialog tick
+  single milestones of the next tiers on top of the tier.
+- **Hide machines too.** Buildings unlock with milestones (the Refinery
+  with Oil Processing), so the "+ Add anything" palette could leave out
+  machines that aren't unlocked. Recipes already gate most of it.
+- **Say what's missing in ✨ Optimize.** When no usable recipe makes an
+  item, the note could name what would unlock one ("Plastic: Tier 5 (Oil
+  Processing)"), with `recipeAccess` / `needsLabel` from `progress.ts`.
+- **MAM prerequisites.** greeny's data has no MAM tree order, so research
+  nodes are ticked one by one. If a source with the tree turns up, ticking
+  a node could tick what it needs.
 
 ### 11. World node limits
 
