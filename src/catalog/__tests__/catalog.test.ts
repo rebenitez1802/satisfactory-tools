@@ -56,6 +56,31 @@ describe('base pack', () => {
     )
   })
 
+  it('counts the default map\'s resource sites', () => {
+    const map = [...catalog.maps.values()][0]
+    expect(map.id).toBe('base:default')
+    const count = (resource: string, site: string) =>
+      map.sites.filter((s) => s.resource === `base:${resource}` && s.site === site).reduce((n, s) => n + s.count, 0)
+    expect(count('Desc_OreIron_C', 'node')).toBe(127)
+    expect(count('Desc_LiquidOil_C', 'node')).toBe(30)
+    expect(count('Desc_LiquidOil_C', 'well')).toBe(18)
+    expect(count('Desc_Water_C', 'well')).toBe(55)
+    expect(map.sites.every((s) => catalog.purities.has(s.purity))).toBe(true)
+    expect(catalog.machines.get('base:Build_MinerMk3_C')?.extraction?.site).toBe('node')
+    expect(catalog.machines.get('base:Build_FrackingExtractor_C')?.extraction?.site).toBe('well')
+    expect(catalog.machines.get('base:Build_WaterPump_C')?.extraction?.site).toBeUndefined()
+  })
+
+  it('drops map sites with unknown resources', () => {
+    const mod: DataPack = {
+      manifest: { id: 'mod', name: 'Mod', version: '1', dependsOn: ['base'] },
+      add: { maps: [{ id: 'island', name: 'Island', sites: [{ resource: 'base:Desc_OreIron_C', site: 'node', purity: 'base:pure', count: 2 }, { resource: 'Nope', site: 'node', purity: 'base:pure', count: 1 }] }] },
+    }
+    const built = buildCatalog([base, mod])
+    expect(built.catalog.maps.get('mod:island')?.sites).toHaveLength(1)
+    expect(built.diagnostics.map((d) => d.id)).toEqual(['mod:island'])
+  })
+
   it('gives every recipe a power draw', () => {
     for (const r of catalog.recipes.values()) {
       const m = catalog.machines.get(r.machines[0])!

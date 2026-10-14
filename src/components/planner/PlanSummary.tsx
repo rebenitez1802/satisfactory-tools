@@ -1,5 +1,5 @@
 import type { Catalog, ItemId } from '../../catalog'
-import { buildCost } from '../../planner'
+import { buildCost, worldUsage } from '../../planner'
 import type { ItemRate, MachineMode, Plan, PlanSettings, SolveResult } from '../../planner'
 import { fmt, mw, pct, tierName } from './format'
 import { Icon } from './Icon'
@@ -19,6 +19,7 @@ export function PlanSummary({
   buildReuse,
   onBuildReuse,
   onBuild,
+  onEditWorld,
 }: {
   plan: Plan
   result: SolveResult
@@ -33,6 +34,8 @@ export function PlanSummary({
   onBuildReuse: (reuse: boolean) => void
   /** ⚡ Build chain for every unconnected input of an item, or of every item. */
   onBuild: (item?: ItemId) => void
+  /** Opens the world node counts. */
+  onEditWorld: () => void
 }) {
   const { totals } = result
   const net = totals.generatedMw - totals.powerMw
@@ -135,6 +138,7 @@ export function PlanSummary({
       </Section>
 
       <Rates title="Resources in" rates={totals.rawResources} catalog={catalog} />
+      <WorldSection plan={plan} result={result} catalog={catalog} />
       <Rates title="Spare output" rates={totals.surplus} catalog={catalog} tone="warn" />
       <Rates
         title="Missing inputs"
@@ -239,6 +243,12 @@ export function PlanSummary({
           </div>
         </div>
         <div className="field">
+          <span>World nodes</span>
+          <button type="button" className="pn-button pn-button-quiet pn-button-inline" onClick={onEditWorld}>
+            {plan.settings.world ? 'This plan\'s own counts' : (catalog.maps.values().next().value?.name ?? 'No map')} · edit…
+          </button>
+        </div>
+        <div className="field">
           <span>Alternate recipes</span>
           <button type="button" className="pn-button pn-button-quiet pn-button-inline" onClick={onEditAlternates}>
             {alternates} · choose…
@@ -303,6 +313,32 @@ function BuildSections({ plan, result, catalog }: { plan: Plan; result: SolveRes
         </Section>
       )}
     </>
+  )
+}
+
+/** Resource nodes and well satellites the plan's extractors take, against what the map has. */
+function WorldSection({ plan, result, catalog }: { plan: Plan; result: SolveResult; catalog: Catalog }) {
+  const use = worldUsage(plan, result, catalog)
+  if (!use.length) return null
+  const purity = (id: string) => catalog.purities.get(id)?.name ?? id
+  return (
+    <Section title="World nodes" action={<span className="pn-section-legend">used / on the map</span>}>
+      {use.map((u) => {
+        const item = catalog.items.get(u.resource)
+        return (
+          <Row key={u.resource + u.site} icon={item && <Icon of={item} size={20} />} label={`${item?.name ?? u.resource}${u.site === 'well' ? ' (wells)' : ''}`}>
+            <span className={u.over ? 'pn-bad' : ''} title={u.purities.map((p) => `${purity(p.purity)}: ${p.used} of ${p.available}`).join(' · ')}>
+              {u.used} / {u.available}
+            </span>
+          </Row>
+        )
+      })}
+      {use.some((u) => u.over) && (
+        <div className="pn-note pn-bad">
+          More nodes than the map has: {use.filter((u) => u.over).map((u) => catalog.items.get(u.resource)?.name ?? u.resource).join(', ')}. Hover a count for each purity.
+        </div>
+      )}
+    </Section>
   )
 }
 

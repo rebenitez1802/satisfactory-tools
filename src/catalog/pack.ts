@@ -15,7 +15,7 @@
 // refer to another pack's entity. Entities added by a pack always belong to
 // that pack.
 
-import type { Item, Machine, Purity, Recipe, TransportTier } from './types'
+import type { Item, Machine, Purity, Recipe, TransportTier, WorldMap } from './types'
 
 export interface PackManifest {
   /** Namespace for the pack's ids. Lowercase letters, digits, '-' and '_'. */
@@ -39,6 +39,7 @@ export interface PackEntities {
   recipes: Recipe
   purities: Purity
   transportTiers: TransportTier
+  maps: WorldMap
 }
 
 export type EntityKind = keyof PackEntities
@@ -49,6 +50,7 @@ export const ENTITY_KINDS: readonly EntityKind[] = [
   'items',
   'machines',
   'recipes',
+  'maps',
 ]
 
 export type EntityPatch<T> = Partial<T> & { id: string }

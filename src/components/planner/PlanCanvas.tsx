@@ -61,6 +61,8 @@ function estimateSize(node: PlanNode, catalog: Catalog) {
 export interface CanvasApi {
   /** ⚡ Build chain: fill these inputs back to raw resources, lay out what's new, and show it. */
   buildChain: (ports: PortRef[]) => void
+  /** Swap in a rebuilt plan (✨ Optimize): lay all of it out as one undo step, and fit the view. */
+  replace: (next: Plan) => void
 }
 
 /** The plan node under a screen point, if any. */
@@ -105,12 +107,15 @@ export function PlanCanvas({
   setPlan,
   result,
   onSelectionChange,
+  onOptimize,
   apiRef,
 }: {
   plan: Plan
   setPlan: Dispatch<SetStateAction<Plan>>
   result: SolveResult
   onSelectionChange: (selection: { nodes: string[]; edges: string[] }) => void
+  /** Opens ✨ Optimize. */
+  onOptimize?: () => void
   apiRef?: MutableRefObject<CanvasApi | null>
 }) {
   const [rfNodes, setRfNodes] = useState<PlanFlowNode[]>(() =>
@@ -494,7 +499,19 @@ export function PlanCanvas({
     },
     [catalog, isRecipeHidden, build, setPlan],
   )
-  if (apiRef) apiRef.current = { buildChain }
+  const replace = useCallback(
+    (next: Plan) => {
+      const sizes = new Map(
+        rfNodesRef.current.map((n) => [n.id, { w: n.measured?.width ?? CARD_W, h: n.measured?.height ?? 100 }]),
+      )
+      for (const n of next.nodes) if (!sizes.has(n.id)) sizes.set(n.id, estimateSize(n, catalog))
+      const moved = layoutPlan(next, sizes)
+      setPlan({ ...next, nodes: next.nodes.map((n) => (moved.has(n.id) ? { ...n, position: moved.get(n.id)! } : n)) })
+      pendingFit.current = []
+    },
+    [catalog, setPlan],
+  )
+  if (apiRef) apiRef.current = { buildChain, replace }
 
   // Zoom to the selected nodes, or the whole plan if nothing is selected (F).
   const zoomToSelection = useCallback(() => {
@@ -597,6 +614,17 @@ export function PlanCanvas({
           >
             ⇶ {selectedCount >= 2 ? 'Tidy selection' : 'Tidy layout'}
           </button>
+          {onOptimize && (
+            <button
+              type="button"
+              className="pn-button pn-button-quiet"
+              onClick={onOptimize}
+              disabled={!plan.nodes.length}
+              title="Pick the best recipes for this plan's goals, and preview the changes before applying them"
+            >
+              ✨ Optimize
+            </button>
+          )}
           <span className="pn-canvas-hint">drag an item onto a node to connect, onto empty space to extend · drag a connected input away to remove its belt · ⌘/Ctrl C, V, D · F zooms to the selection</span>
         </Panel>
         {plan.nodes.length === 0 && !picker && (

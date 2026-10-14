@@ -18,6 +18,7 @@ export type MachineId = Id
 export type RecipeId = Id
 export type PurityId = Id
 export type TransportTierId = Id
+export type MapId = Id
 
 /** Physical form. Solids ride belts; liquids and gases go through pipes. */
 export type ItemForm = 'solid' | 'liquid' | 'gas'
@@ -104,6 +105,13 @@ export interface ExtractionSpec {
    */
   anywhere?: boolean
   /**
+   * The kind of world site it is built on ('node' for resource nodes, 'well'
+   * for resource-well satellites). Extractors with the same kind compete for
+   * the same sites, which a map counts (`WorldMap`). Absent: not limited by
+   * the world.
+   */
+  site?: string
+  /**
    * Machine that powers this extractor's sites instead of each site drawing its
    * own power, e.g. resource-well satellites are driven by one pressurizer.
    * The planner charges this machine's power once per extractor node.
@@ -175,6 +183,22 @@ export interface Recipe {
   tags?: string[]
 }
 
+/** How many sites of one kind a map has for one resource, at one purity. */
+export interface WorldSite {
+  resource: ItemId
+  /** Matches `ExtractionSpec.site`. */
+  site: string
+  purity: PurityId
+  count: number
+}
+
+/** A world map's resource sites, for world node limits and the optimizer's scarcity weights. */
+export interface WorldMap {
+  id: MapId
+  name: string
+  sites: WorldSite[]
+}
+
 /** The merged, ready-to-query result of loading a set of packs. */
 export interface Catalog {
   /** Manifests of the packs merged into this catalog, in load order. */
@@ -184,6 +208,8 @@ export interface Catalog {
   recipes: ReadonlyMap<RecipeId, Recipe>
   purities: ReadonlyMap<PurityId, Purity>
   transportTiers: ReadonlyMap<TransportTierId, TransportTier>
+  /** World maps; the first is the default. */
+  maps: ReadonlyMap<MapId, WorldMap>
   /** Recipes listing the item among their outputs. */
   recipesProducing: ReadonlyMap<ItemId, RecipeId[]>
   /** Recipes listing the item among their inputs. */

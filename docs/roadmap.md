@@ -21,13 +21,13 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | 4 | [Belt counts instead of red edges](#4-belt-counts-instead-of-red-edges) | M1 | Medium | XS–S | Done (PR #11) |
 | 5 | [Better default zoom](#5-better-default-zoom) | M1 | Low–Med | XS | Done (PR #5) |
 | — | [Rates on unconnected ports](#quick-win-rates-on-unconnected-ports) | M1 | Medium | XS | Done (PR #5) |
-| 6 | [Optimizer](#6-optimizer-mode-3) | M2 | Very high | L | Planned |
+| 6 | [Optimizer](#6-optimizer-mode-3) | M2 | Very high | L | Done (PR #17) |
 | 7 | [Split shares on outputs](#7-split-shares-on-outputs) | M2 | Medium | S–M | Planned |
 | 8 | [Generators and net power](#8-generators-and-net-power) | M2 | Med–High | M | Done (PR #6) |
 | 9 | [Share a plan as a link](#9-share-a-plan-as-a-link) | M2 | Medium | S | Planned |
 | 17 | [Use leftovers](#17-use-leftovers) | M2 | High | M | Planned, after #2 and #6 |
 | 10 | [1.2 power multiplier](#10-12-power-multiplier) | M2 | Medium | XS | Blocked on user's rules |
-| 11 | [World node limits](#11-world-node-limits) | M3 | Medium | M | Later |
+| 11 | [World node limits](#11-world-node-limits) | M3 | Medium | M | Done (PR #17) |
 | 12 | [Byproduct-driven chains](#12-byproduct-driven-chains) | M2 | Med–High | M | Done (PR #6) |
 | 13 | [Inspector covering cards](#13-inspector-covering-cards) | M3 | Low | S | Done (PR #11) |
 | 14 | [Belt line style in the balancer](#14-belt-line-style-in-the-balancer) | M3 | Low | XS | Later |
@@ -57,7 +57,7 @@ and useful straight away while playing. Reorder freely.
 | 2 | Refine and read | #3, #4, #13 | Done (PR #11). Closes M1. |
 | 3 | Build in game | #21, #20 | Done (PR #12). |
 | 4 | Byproduct loops | #16 | Done (PR #15), without the LP: loops are solved with the spare-byproduct rule. Isolated because it changes rates. |
-| 5 | Optimize | #6, #11 | The LP core and the Optimize action ship together; world node counts weigh "fewest raw resources". |
+| 5 | Optimize | #6, #11 | Done (PR #17), after a solver fix it needed (PR #16: byproducts feeding their maker's own goal). |
 | 6 | Real belts | #19, #18 | Both turn one logical flow into belts you can build, and share a helper that puts machines onto belts. Builds on #4's belt counts. |
 | 7 | Use leftovers | #17 | Builds on #2 (adding nodes) and #6 (ranking suggestions). |
 | any time | Small standalones | #9, #15, #14 | Independent; slot one in between the big ones. |
@@ -264,6 +264,32 @@ rules are in [production-planner.md](production-planner.md#presentation)
 ## M2 — Smarter plans
 
 ### 6. Optimizer (mode 3)
+
+**Done.** Its behaviour is in
+[production-planner.md](production-planner.md#interaction) ("✨ Optimize").
+How it went against the notes below:
+- The LP is a small dense two-phase simplex of our own (`src/planner/lp.ts`),
+  not `javascript-lp-solver` (unmaintained since 2019, no types). A whole
+  rocket solves in under 10 ms, so no Web Worker. The item rows all have a
+  right-hand side of 0, which makes it badly degenerate: rows are relaxed
+  by tiny, different amounts, and the exact answer is recovered from the
+  final basis.
+- It works on the whole plan, not a selected goal: kept nodes (goals,
+  sources, generators, ⛔ groups) stay, flexible machine groups are rebuilt.
+- Building plans from LP flows found a solver bug: a byproduct feeding its
+  maker's own goal (alumina's silica to the ingot) was cut into a later
+  stage and came out as 0. Fixed separately first (PR #16).
+- A Max goal behind one ⛔ limit pulls in new, unlimited resources to
+  stretch it, whatever the objective. That's the point of "how much power
+  can I get from one uranium node?" (the user's use case, 2026-10-14), so
+  Max generators are maximized together, in MW: uranium plants plus the
+  plutonium plants burning their waste.
+- Byproduct water is never piped back by the optimizer (water is free).
+- Follow-up (solver): a byproduct maker shared by two stages doesn't hand
+  its later-stage growth to that stage's consumer; the optimizer adds a
+  producer instead. See production-planner.md, Follow-ups.
+
+The original notes:
 
 **Value:** "pick the best recipes for me." This is the final goal named in the
 spec. **Effort:** L.
@@ -561,6 +587,10 @@ known.
 ## M3 — Nice to have
 
 ### 11. World node limits
+
+**Done.** Its behaviour is in [production-planner.md](production-planner.md#interaction)
+("World nodes") and [data-model.md](data-model.md). The counts below were
+checked against each wiki page's maximum per minute. The original notes:
 
 **Value:** "you only have 46 pure iron nodes on the map", plus resource caps
 for the optimizer. **Effort:** M.

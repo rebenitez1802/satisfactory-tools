@@ -1,7 +1,7 @@
 # Production planner data model
 
-The planner never hard-codes game content. Items, machines, recipes, purities
-and belt/pipe tiers are loaded from **data packs**. Code only branches on
+The planner never hard-codes game content. Items, machines, recipes, purities,
+belt/pipe tiers and world maps are loaded from **data packs**. Code only branches on
 engine rules such as an item's form or whether a machine extracts or runs
 recipes. That keeps mods (new machines, resources, recipes) and future game
 patches a data change, not a code change.
@@ -23,6 +23,9 @@ scripts/                           build-time importers (not shipped)
      for generators. `extraction.anywhere` marks extractors that aren't tied
      to resource nodes (the Water Extractor goes on any water), so any number
      can be built and the UI counts extractors rather than nodes.
+     `extraction.site` names the kind of world site it goes on (`node` for
+     miners and oil extractors, `well` for well satellites); extractors of
+     the same kind compete for the same sites.
      `buildCost` lists the items one of the machine costs to build; absent
      means unknown, not free. A cost naming an item that isn't loaded is
      dropped with a diagnostic.
@@ -35,6 +38,10 @@ scripts/                           build-time importers (not shipped)
    - `Recipe`: inputs and outputs per cycle, duration, the machines that can
      run it, and an alternate flag.
    - `Purity` and `TransportTier`.
+   - `WorldMap`: a map's resource sites, as counts per resource, kind of
+     site and purity. The first map is the default; a plan may carry its
+     own counts (`PlanSettings.world`). The base pack's default map comes
+     from the wiki's per-resource pages, in `scripts/base-overlay.ts`.
 
    `buildCatalog(packs, { enabled })` merges packs into an immutable `Catalog`
    with lookup indexes (`recipesProducing`, `recipesConsuming`,
@@ -64,7 +71,10 @@ scripts/                           build-time importers (not shipped)
      needed).
    - Generators are linear: N machines' worth at 100% make N × their MW and
      burn N × the fuel, at any clock.
-   - Not modelled yet: the 1.2 cost multipliers and world node limits.
+   - World node limits (`src/planner/world.ts`): the most a site gives is
+     the fastest extractor that fits it at its highest clock, capped by
+     the fastest belt or pipe (a pure iron node: Mk.3 at 250% = 1200/min).
+   - Not modelled yet: the 1.2 cost multipliers.
      Geothermal generators are left out on purpose: no production chain
      feeds them.
 
@@ -95,7 +105,8 @@ npm run data:base   # scripts/import-base.ts + scripts/fetch-icons.ts
   each machine by its class name.
 - Values greeny lacks are hand-written in `scripts/base-overlay.ts`: ports,
   Somersloop slots, purities, belt and pipe tiers, the Water Extractor,
-  resource wells, gas forms, generator ports, and the waste each nuclear fuel
-  rod leaves (greeny lists generators' fuels and water but not their waste).
-- Icons come from satisfactory.wiki.gg. They are © Coffee Stain Studios and
-  credited in the site footer.
+  resource wells, gas forms, generator ports, the waste each nuclear fuel
+  rod leaves (greeny lists generators' fuels and water but not their waste),
+  and the default map's resource node counts.
+- Icons and resource node counts come from satisfactory.wiki.gg. Icons are
+  © Coffee Stain Studios; both are credited in the site footer.

@@ -78,8 +78,14 @@ export interface InputPort {
  */
 export function shortfall(port: InputPort): number {
   const short = port.needed - port.supplied
-  return port.connected && short > EPS * Math.max(1, port.needed) ? short : 0
+  return port.connected && short > SHORT_TOL * Math.max(1, port.needed) ? short : 0
 }
+
+/**
+ * A loop settles to within EPS of the plan's largest rate, so a shortfall
+ * (or a surplus) smaller than this share of the port's rate is rounding.
+ */
+const SHORT_TOL = 1e-6
 
 export interface OutputPort {
   item: ItemId
@@ -846,7 +852,8 @@ function assemble(
         message: `${item?.name ?? p.item} is ${num(short)}${perMin(item)} short: the loop brings back ${num(p.supplied)} of the ${num(p.needed)} it needs. Connect another producer for the rest.`,
       })
     }
-    if (n.kind !== 'goal') for (const p of outputs) add(surplus, p.item, p.produced - p.used)
+    // Rounding across stages leaves crumbs; only a real share is spare.
+    if (n.kind !== 'goal') for (const p of outputs) if (p.produced - p.used > SHORT_TOL * Math.max(1, p.produced)) add(surplus, p.item, p.produced - p.used)
     for (const p of outputs) {
       const item = catalog.items.get(p.item)
       const left = p.produced - p.used

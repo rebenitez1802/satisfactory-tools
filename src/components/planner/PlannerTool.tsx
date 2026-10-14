@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import type { Catalog, ItemId } from '../../catalog'
-import { builtCount, duplicateNodes, markDone, missingInputs, newNodeId, removeNodes, setRecipe, solvePlan, updateNode, validatePlan } from '../../planner'
+import { builtCount, duplicateNodes, worldSites, markDone, missingInputs, newNodeId, removeNodes, setRecipe, solvePlan, updateNode, validatePlan } from '../../planner'
 import type { Plan, PlanEdge, PlanNode, PlanSettings } from '../../planner'
 import { AlternatesModal } from './AlternatesModal'
 import { BalancerPopup } from './BalancerPopup'
+import { OptimizeModal } from './OptimizeModal'
+import { WorldModal } from './WorldModal'
 import { CatalogProvider, useCatalog, useCatalogState } from './catalogContext'
 import { Inspector, type InspectorActions } from './Inspector'
 import { PlanCanvas, type CanvasApi } from './PlanCanvas'
@@ -81,6 +83,8 @@ function Planner() {
   const [selection, setSelection] = useState<{ nodes: string[]; edges: string[] }>({ nodes: [], edges: [] })
   const [openSplit, setOpenSplit] = useState<{ nodeId: string; item: ItemId } | null>(null)
   const [showAlternates, setShowAlternates] = useState(false)
+  const [showOptimize, setShowOptimize] = useState(false)
+  const [showWorld, setShowWorld] = useState(false)
   const [fileError, setFileError] = useState<string>()
   const [prefs, setPrefs] = useState(loadPrefs)
   const locked = useMemo(() => new Set(prefs.lockedAlternates), [prefs])
@@ -276,6 +280,7 @@ function Planner() {
   )
   const split = openSplit && result.splits.find((s) => s.node === openSplit.nodeId && s.item === openSplit.item)
   const alternateCount = [...catalog.recipes.values()].filter((r) => r.alternate).length
+  const alternates = `${alternateCount - [...locked].filter((id) => catalog.recipes.has(id)).length} of ${alternateCount} unlocked`
   const liveSelection = {
     nodes: selection.nodes.filter((id) => plan.nodes.some((n) => n.id === id)),
     edges: selection.edges.filter((id) => plan.edges.some((e) => e.id === id)),
@@ -311,18 +316,26 @@ function Planner() {
             result={result}
             catalog={catalog}
             updateSettings={updateSettings}
-            alternates={`${alternateCount - [...locked].filter((id) => catalog.recipes.has(id)).length} of ${alternateCount} unlocked`}
+            alternates={alternates}
             onEditAlternates={() => setShowAlternates(true)}
             edgeStyle={prefs.edgeStyle}
             onEdgeStyle={(edgeStyle) => updatePrefs({ edgeStyle })}
             buildReuse={prefs.buildReuse}
             onBuildReuse={(buildReuse) => updatePrefs({ buildReuse })}
             onBuild={(item) => canvas.current?.buildChain(missingInputs(plan, catalog, result, { item }))}
+            onEditWorld={() => setShowWorld(true)}
           />
         </section>
         <section className="panel graph-panel pn-graph-panel">
           <ReactFlowProvider key={canvasKey}>
-            <PlanCanvas plan={plan} setPlan={setPlan} result={result} onSelectionChange={setSelection} apiRef={canvas} />
+            <PlanCanvas
+              plan={plan}
+              setPlan={setPlan}
+              result={result}
+              onSelectionChange={setSelection}
+              onOptimize={() => setShowOptimize(true)}
+              apiRef={canvas}
+            />
           </ReactFlowProvider>
           <Inspector
             plan={plan}
@@ -347,6 +360,36 @@ function Planner() {
         </div>
       )}
       {split && <BalancerPopup split={split} plan={plan} onClose={() => setOpenSplit(null)} />}
+      {showOptimize && (
+        <OptimizeModal
+          plan={plan}
+          result={result}
+          catalog={catalog}
+          isRecipeHidden={isRecipeHidden}
+          alternates={alternates}
+          objective={prefs.optimizeFor}
+          onObjective={(optimizeFor) => updatePrefs({ optimizeFor })}
+          onApply={(next) => {
+            canvas.current?.replace(next)
+            setShowOptimize(false)
+          }}
+          onClose={() => setShowOptimize(false)}
+        />
+      )}
+      {showWorld && (
+        <WorldModal
+          catalog={catalog}
+          sites={worldSites(plan, catalog)}
+          custom={!!plan.settings.world}
+          onChange={(world) =>
+            setPlan((p) => {
+              const { world: _, ...settings } = p.settings
+              return { ...p, settings: world ? { ...settings, world } : settings }
+            }, 'world')
+          }
+          onClose={() => setShowWorld(false)}
+        />
+      )}
       {showAlternates && (
         <AlternatesModal
           catalog={catalog}

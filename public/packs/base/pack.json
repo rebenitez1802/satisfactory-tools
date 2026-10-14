@@ -4,11 +4,11 @@
   "name": "Satisfactory (base game)",
   "version": "1.2.0",
   "gameVersion": "1.2",
-  "description": "Vanilla items, machines and recipes.",
+  "description": "Vanilla items, machines, recipes and the default map.",
   "credits": [
    "Game content and icons © Coffee Stain Studios.",
    "Recipe data from greeny/SatisfactoryTools (MIT), commit 74b691c.",
-   "Icons from the Official Satisfactory Wiki (satisfactory.wiki.gg)."
+   "Icons and resource node counts from the Official Satisfactory Wiki (satisfactory.wiki.gg)."
   ]
  },
  "add": {
@@ -1459,6 +1459,7 @@
      ],
      "ratePerMin": 60,
      "usesPurity": true,
+     "site": "well",
      "poweredBy": "Build_FrackingSmasher_C"
     },
     "icon": "icons/Build_FrackingExtractor_C.png"
@@ -1855,7 +1856,8 @@
       "Desc_OreUranium_C"
      ],
      "ratePerMin": 60,
-     "usesPurity": true
+     "usesPurity": true,
+     "site": "node"
     },
     "icon": "icons/Build_MinerMk1_C.png"
    },
@@ -1915,7 +1917,8 @@
       "Desc_OreUranium_C"
      ],
      "ratePerMin": 120,
-     "usesPurity": true
+     "usesPurity": true,
+     "site": "node"
     },
     "icon": "icons/Build_MinerMk2_C.png"
    },
@@ -1979,7 +1982,8 @@
       "Desc_OreUranium_C"
      ],
      "ratePerMin": 240,
-     "usesPurity": true
+     "usesPurity": true,
+     "site": "node"
     },
     "icon": "icons/Build_MinerMk3_C.png"
    },
@@ -2026,7 +2030,8 @@
       "Desc_LiquidOil_C"
      ],
      "ratePerMin": 120,
-     "usesPurity": true
+     "usesPurity": true,
+     "site": "node"
     },
     "icon": "icons/Build_OilPump_C.png"
    },
@@ -9854,6 +9859,254 @@
      }
     ],
     "alternate": false
+   }
+  ],
+  "maps": [
+   {
+    "id": "default",
+    "name": "Default map",
+    "sites": [
+     {
+      "resource": "Desc_OreIron_C",
+      "site": "node",
+      "purity": "impure",
+      "count": 39
+     },
+     {
+      "resource": "Desc_OreIron_C",
+      "site": "node",
+      "purity": "normal",
+      "count": 42
+     },
+     {
+      "resource": "Desc_OreIron_C",
+      "site": "node",
+      "purity": "pure",
+      "count": 46
+     },
+     {
+      "resource": "Desc_OreCopper_C",
+      "site": "node",
+      "purity": "impure",
+      "count": 13
+     },
+     {
+      "resource": "Desc_OreCopper_C",
+      "site": "node",
+      "purity": "normal",
+      "count": 29
+     },
+     {
+      "resource": "Desc_OreCopper_C",
+      "site": "node",
+      "purity": "pure",
+      "count": 13
+     },
+     {
+      "resource": "Desc_Stone_C",
+      "site": "node",
+      "purity": "impure",
+      "count": 15
+     },
+     {
+      "resource": "Desc_Stone_C",
+      "site": "node",
+      "purity": "normal",
+      "count": 50
+     },
+     {
+      "resource": "Desc_Stone_C",
+      "site": "node",
+      "purity": "pure",
+      "count": 29
+     },
+     {
+      "resource": "Desc_Coal_C",
+      "site": "node",
+      "purity": "impure",
+      "count": 15
+     },
+     {
+      "resource": "Desc_Coal_C",
+      "site": "node",
+      "purity": "normal",
+      "count": 31
+     },
+     {
+      "resource": "Desc_Coal_C",
+      "site": "node",
+      "purity": "pure",
+      "count": 16
+     },
+     {
+      "resource": "Desc_OreGold_C",
+      "site": "node",
+      "purity": "normal",
+      "count": 9
+     },
+     {
+      "resource": "Desc_OreGold_C",
+      "site": "node",
+      "purity": "pure",
+      "count": 8
+     },
+     {
+      "resource": "Desc_RawQuartz_C",
+      "site": "node",
+      "purity": "impure",
+      "count": 3
+     },
+     {
+      "resource": "Desc_RawQuartz_C",
+      "site": "node",
+      "purity": "normal",
+      "count": 7
+     },
+     {
+      "resource": "Desc_RawQuartz_C",
+      "site": "node",
+      "purity": "pure",
+      "count": 7
+     },
+     {
+      "resource": "Desc_Sulfur_C",
+      "site": "node",
+      "purity": "impure",
+      "count": 6
+     },
+     {
+      "resource": "Desc_Sulfur_C",
+      "site": "node",
+      "purity": "normal",
+      "count": 5
+     },
+     {
+      "resource": "Desc_Sulfur_C",
+      "site": "node",
+      "purity": "pure",
+      "count": 5
+     },
+     {
+      "resource": "Desc_OreBauxite_C",
+      "site": "node",
+      "purity": "impure",
+      "count": 5
+     },
+     {
+      "resource": "Desc_OreBauxite_C",
+      "site": "node",
+      "purity": "normal",
+      "count": 6
+     },
+     {
+      "resource": "Desc_OreBauxite_C",
+      "site": "node",
+      "purity": "pure",
+      "count": 6
+     },
+     {
+      "resource": "Desc_OreUranium_C",
+      "site": "node",
+      "purity": "impure",
+      "count": 3
+     },
+     {
+      "resource": "Desc_OreUranium_C",
+      "site": "node",
+      "purity": "normal",
+      "count": 2
+     },
+     {
+      "resource": "Desc_SAM_C",
+      "site": "node",
+      "purity": "impure",
+      "count": 10
+     },
+     {
+      "resource": "Desc_SAM_C",
+      "site": "node",
+      "purity": "normal",
+      "count": 6
+     },
+     {
+      "resource": "Desc_SAM_C",
+      "site": "node",
+      "purity": "pure",
+      "count": 3
+     },
+     {
+      "resource": "Desc_LiquidOil_C",
+      "site": "node",
+      "purity": "impure",
+      "count": 10
+     },
+     {
+      "resource": "Desc_LiquidOil_C",
+      "site": "node",
+      "purity": "normal",
+      "count": 12
+     },
+     {
+      "resource": "Desc_LiquidOil_C",
+      "site": "node",
+      "purity": "pure",
+      "count": 8
+     },
+     {
+      "resource": "Desc_LiquidOil_C",
+      "site": "well",
+      "purity": "impure",
+      "count": 8
+     },
+     {
+      "resource": "Desc_LiquidOil_C",
+      "site": "well",
+      "purity": "normal",
+      "count": 6
+     },
+     {
+      "resource": "Desc_LiquidOil_C",
+      "site": "well",
+      "purity": "pure",
+      "count": 4
+     },
+     {
+      "resource": "Desc_NitrogenGas_C",
+      "site": "well",
+      "purity": "impure",
+      "count": 2
+     },
+     {
+      "resource": "Desc_NitrogenGas_C",
+      "site": "well",
+      "purity": "normal",
+      "count": 7
+     },
+     {
+      "resource": "Desc_NitrogenGas_C",
+      "site": "well",
+      "purity": "pure",
+      "count": 36
+     },
+     {
+      "resource": "Desc_Water_C",
+      "site": "well",
+      "purity": "impure",
+      "count": 7
+     },
+     {
+      "resource": "Desc_Water_C",
+      "site": "well",
+      "purity": "normal",
+      "count": 12
+     },
+     {
+      "resource": "Desc_Water_C",
+      "site": "well",
+      "purity": "pure",
+      "count": 36
+     }
+    ]
    }
   ]
  }
