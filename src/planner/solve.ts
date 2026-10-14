@@ -21,12 +21,14 @@
 // shouldn't grow because something downstream wants more of its heavy oil
 // residue, and a chain fed only by that residue has no demand at all. So the
 // plan is solved in *stages*. Belts carrying a byproduct (a recipe's second
-// output, or a generator's waste) cut the plan where the maker's own stage
-// has an anchor. Stages are solved producers first, and each cut belt arrives
-// in the next stage as a limited supply of what the maker has spare, used
-// before any other producer of that item. Open ends then fill the
+// output, or a generator's waste) are cut where the maker's main products
+// lead to an anchor. Stages are solved producers first, and each cut belt
+// arrives in the next stage as a limited supply of what the maker has spare,
+// used before any other producer of that item. Open ends then fill the
 // downstream chain from it. A byproduct whose maker has nothing else to run
-// for is still pulled like a main product.
+// for is still pulled like a main product. Stages can share nodes upstream
+// (one Water Extractor for the reactors and their waste chain): a later stage
+// adds its demand to theirs and gets what is left of their limits.
 
 import type { Catalog, ItemId, Machine, MachineId, Recipe, TransportTierId } from '../catalog'
 import {
@@ -448,11 +450,11 @@ const OPEN_END = '~open:'
  * node with nothing connected downstream gets an implicit Max goal on its main
  * output, so a lone miner, or miner → smelter, shows its full output.
  */
-function withOpenEnds(plan: Plan, catalog: Catalog): Plan {
+function withOpenEnds(plan: Plan, catalog: Catalog, feeds: Set<string>): Plan {
   const g = buildGraph(plan, catalog, [])
+  const feeding = new Set([...feeds, ...g.edges.map((e) => e.source)])
   const withGoal = new Set(plan.nodes.filter((n) => g.units.get(n.id)?.anchor !== undefined).map((n) => g.component.get(n.id)))
   const withLimit = new Set(plan.nodes.filter((n) => g.units.get(n.id)?.limit !== undefined).map((n) => g.component.get(n.id)))
-  const feeding = new Set(g.edges.map((e) => e.source))
   const nodes: PlanNode[] = []
   const edges: PlanEdge[] = []
   for (const n of plan.nodes) {
@@ -467,77 +469,62 @@ function withOpenEnds(plan: Plan, catalog: Catalog): Plan {
   return nodes.length ? { ...plan, nodes: [...plan.nodes, ...nodes], edges: [...plan.edges, ...edges] } : plan
 }
 
+interface Stage {
+  /** The nodes the stage solves: its own, and what they draw on from earlier stages. */
+  nodes: string[]
+  /** Nodes of earlier stages that this one draws on too (a shared extractor, say). */
+  borrowed: Set<string>
+}
+
 /**
- * Group nodes into stages (see the top of this file) and order them so every
- * stage comes after the stages whose byproducts it takes. `cross` are the
- * byproduct belts between stages.
+ * Cut the plan into stages (see the top of this file), in solving order.
+ * `cross` are the byproduct belts that were cut.
+ *
+ * A node's stage is how many cut belts lie on its longest way in, so a
+ * byproduct's consumers always come after its maker. The stages are not
+ * separate parts of the plan: a stage also takes in every node upstream of
+ * its own, so a Water Extractor or a smelter line feeding both a reactor and
+ * its waste chain serves both, and adds up what each asks of it.
  */
-function splitStages(g: Graph): { stages: string[][]; cross: PlanEdge[] } {
+function splitStages(g: Graph): { stages: Stage[]; cross: PlanEdge[] } {
   const ids = g.nodes.filter((n) => g.units.has(n.id)).map((n) => n.id)
-  const parent = new Map(ids.map((id) => [id, id]))
-  const find = (x: string): string => {
-    let r = x
-    while (parent.get(r) !== r) r = parent.get(r)!
-    parent.set(x, r)
-    return r
-  }
-  const union = (a: string, b: string) => parent.set(find(a), find(b))
   const byproduct = (e: PlanEdge) => g.units.get(e.source)!.byproducts.has(e.item)
-  const between = () => g.edges.filter((e) => find(e.source) !== find(e.target))
+  const reachable = (from: string[], next: Map<string, string[]>) => {
+    const seen = new Set(from)
+    const queue = [...from]
+    while (queue.length) for (const t of next.get(queue.pop()!) ?? []) if (!seen.has(t)) seen.add(t), queue.push(t)
+    return seen
+  }
+  const downstream = new Map<string, string[]>()
+  for (const e of g.edges) pushTo(downstream, e.source, e.target)
+  // A byproduct only arrives as spare when its maker has an anchor to run for
+  // down its main products; otherwise the consumer's demand is what runs the
+  // maker. Belts that loop back into their maker's own chain stay pulled too.
+  const feeders = new Map<string, string[]>()
+  for (const e of g.edges) if (!byproduct(e)) pushTo(feeders, e.target, e.source)
+  const runsFor = reachable(ids.filter((id) => g.units.get(id)!.anchor !== undefined), feeders)
+  const cross = g.edges.filter((e) => byproduct(e) && runsFor.has(e.source) && !reachable([e.target], downstream).has(e.source))
+  const cut = new Set(cross)
 
-  for (const e of g.edges) if (!byproduct(e)) union(e.source, e.target)
-  // A byproduct only arrives as spare when its maker's stage has an anchor
-  // to run for; otherwise the consumer's demand is what runs the maker.
+  // Longest way in, counting cut belts. No loop holds a cut belt, so it settles.
+  const depth = new Map(ids.map((id) => [id, 0]))
   for (let changed = true; changed; ) {
     changed = false
-    const anchored = new Set(ids.filter((id) => g.units.get(id)!.anchor !== undefined).map(find))
-    for (const e of between()) {
-      if (!anchored.has(find(e.source))) {
-        union(e.source, e.target)
-        changed = true
-      }
+    for (const e of g.edges) {
+      const d = depth.get(e.source)! + (cut.has(e) ? 1 : 0)
+      if (d > depth.get(e.target)!) depth.set(e.target, d), (changed = true)
     }
   }
-  // Stages that feed each other round a loop are solved together.
-  for (let changed = true; changed; ) {
-    changed = false
-    const next = new Map<string, string[]>()
-    for (const e of between()) pushTo(next, find(e.source), find(e.target))
-    const reaches = (from: string, to: string) => {
-      const seen = new Set([from])
-      const queue = [from]
-      while (queue.length) {
-        const s = queue.pop()!
-        if (s === to) return true
-        for (const t of next.get(s) ?? []) if (!seen.has(t)) seen.add(t), queue.push(t)
-      }
-      return false
-    }
-    const loop = between().find((e) => reaches(find(e.target), find(e.source)))
-    if (loop) {
-      union(loop.source, loop.target)
-      changed = true
-    }
+  const upstream = new Map<string, string[]>()
+  for (const e of g.edges) if (!cut.has(e)) pushTo(upstream, e.target, e.source)
+  const stages: Stage[] = []
+  for (let k = 0; k <= Math.max(0, ...depth.values()); k++) {
+    const own = ids.filter((id) => depth.get(id) === k)
+    if (!own.length) continue
+    const nodes = [...reachable(own, upstream)]
+    stages.push({ nodes, borrowed: new Set(nodes.filter((id) => depth.get(id)! < k)) })
   }
-
-  const cross = between()
-  const members = new Map<string, string[]>()
-  for (const id of ids) pushTo(members, find(id), id)
-  const waiting = new Map([...members.keys()].map((s) => [s, 0]))
-  for (const e of cross) waiting.set(find(e.target), waiting.get(find(e.target))! + 1)
-  const order: string[] = []
-  const queue = [...members.keys()].filter((s) => waiting.get(s) === 0)
-  while (queue.length) {
-    const s = queue.shift()!
-    order.push(s)
-    for (const e of cross) {
-      if (find(e.source) !== s) continue
-      const t = find(e.target)
-      waiting.set(t, waiting.get(t)! - 1)
-      if (waiting.get(t) === 0) queue.push(t)
-    }
-  }
-  return { stages: order.map((s) => members.get(s)!), cross }
+  return { stages, cross }
 }
 
 export function solvePlan(plan: Plan, catalog: Catalog): SolveResult {
@@ -545,14 +532,18 @@ export function solvePlan(plan: Plan, catalog: Catalog): SolveResult {
   const whole = buildGraph(plan, catalog, diagnostics)
   const { stages, cross } = splitStages(whole)
 
-  const pass: Pass = { activity: new Map(), edgeFlow: new Map(), converged: true }
+  const pass: Pass = { activity: new Map(), edgeFlow: new Map(whole.edges.map((e) => [e.id, 0])), converged: true }
   const goalValues = new Map<string, number>()
   const bottlenecks = new Set<string>()
   const openEnds: Plan = { ...plan, nodes: [], edges: [] }
   const portFlow = (node: string, item: ItemId) =>
     (whole.out.get(key(node, item)) ?? []).reduce((s, e) => s + (pass.edgeFlow.get(e.id) ?? 0), 0)
+  const add = (m: Map<string, number>, id: string, v: number) => m.set(id, (m.get(id) ?? 0) + v)
+  const cutEdges = new Set(cross)
+  // Only nodes with nothing connected downstream, in the whole plan, are open ends.
+  const feeds = new Set(whole.edges.map((e) => e.source))
 
-  for (const stage of stages) {
+  for (const { nodes: stage, borrowed } of stages) {
     const inStage = new Set(stage)
     // Byproducts from earlier stages arrive as limited supplies of what's spare.
     const spares = new Map<string, SupplyNode>()
@@ -569,15 +560,21 @@ export function solvePlan(plan: Plan, catalog: Catalog): SolveResult {
       }
       arriving.push({ ...e, source: id })
     }
+    // A node borrowed from an earlier stage runs for this one on top of what
+    // it already does: a limit only has its room left, and an anchor was
+    // already met there.
     const sub: Plan = {
       ...plan,
-      nodes: [...whole.nodes.filter((n) => inStage.has(n.id)), ...spares.values()],
-      edges: [...whole.edges.filter((e) => inStage.has(e.source) && inStage.has(e.target)), ...arriving],
+      nodes: [
+        ...whole.nodes.filter((n) => inStage.has(n.id)).map((n) => (borrowed.has(n.id) && n.kind === 'recipe' ? { ...n, power: undefined } : n)),
+        ...spares.values(),
+      ],
+      edges: [...whole.edges.filter((e) => !cutEdges.has(e) && inStage.has(e.target)), ...arriving],
     }
     const real = (id: string) => makerOf.get(id) ?? id
-    const sol = solveStage(sub, catalog)
-    for (const [id, a] of sol.pass.activity) if (!makerOf.has(id)) pass.activity.set(id, a)
-    for (const [id, f] of sol.pass.edgeFlow) pass.edgeFlow.set(id, f)
+    const sol = solveStage(sub, catalog, feeds, pass.activity)
+    for (const [id, a] of sol.pass.activity) if (!makerOf.has(id)) add(pass.activity, id, a)
+    for (const [id, f] of sol.pass.edgeFlow) add(pass.edgeFlow, id, f)
     pass.converged &&= sol.pass.converged
     for (const [id, v] of sol.goalValues) goalValues.set(id, v)
     for (const id of sol.bottlenecks) bottlenecks.add(real(id))
@@ -614,10 +611,15 @@ interface StageSolution {
   diagnostics: PlanDiagnostic[]
 }
 
-function solveStage(stage: Plan, catalog: Catalog): StageSolution {
-  const plan = withOpenEnds(stage, catalog)
+/**
+ * `feeds`: nodes with anything connected downstream in the whole plan.
+ * `usedBefore`: what earlier stages already take of each node.
+ */
+function solveStage(stage: Plan, catalog: Catalog, feeds: Set<string>, usedBefore: Map<string, number>): StageSolution {
+  const plan = withOpenEnds(stage, catalog, feeds)
   const diagnostics: PlanDiagnostic[] = []
   const g = buildGraph(plan, catalog, [])
+  for (const [id, u] of g.units) if (u.limit !== undefined) u.limit = Math.max(0, u.limit - (usedBefore.get(id) ?? 0))
   const goals = plan.nodes.filter((n) => g.units.get(n.id)?.anchor !== undefined)
   const anchor = (id: string) => g.units.get(id)!.anchor!
   const limited = plan.nodes.filter((n) => g.units.get(n.id)?.limit !== undefined)
@@ -673,7 +675,10 @@ function solveStage(stage: Plan, catalog: Catalog): StageSolution {
       for (const l of limited) {
         const used = alone.activity.get(l.id) ?? 0
         const limit = g.units.get(l.id)!.limit!
-        if (used > EPS) cost += limit > EPS ? used / limit : Infinity
+        if (used <= EPS) continue
+        cost += limit > EPS ? used / limit : Infinity
+        // Nothing left of it (an earlier stage took it all): it's what stops the goal.
+        if (limit <= EPS) bottlenecks.add(l.id)
       }
       if (cost > EPS) weight.set(n.id, 1 / cost)
       else {

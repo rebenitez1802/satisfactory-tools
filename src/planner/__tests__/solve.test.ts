@@ -692,3 +692,82 @@ describe('byproducts', () => {
     expect(r.goals[0].achieved).toBe(20)
   })
 })
+
+describe('byproducts shared between stages', () => {
+  const WASTE = 'Desc_NuclearWaste_C'
+  const WATER = 'Desc_Water_C'
+  const ORE = 'Desc_OreUranium_C'
+  const pump = (id: string) => extractorNode(id, 'Build_WaterPump_C', WATER, [{ purity: 'base:normal', count: 1 }])
+
+  it('consumers of one spare byproduct share it, even when not linked to each other', () => {
+    // 4 uranium plants make 40 waste/min; the Blender and the Particle Accelerator both take it.
+    const [nodes, edges] = wasteChain(reactor('u', 'NuclearFuelRod', { power: 10000 }), reactor('pu', 'PlutoniumFuelRod', { power: 'max' }))
+    const r = solvePlan(
+      plan(
+        nodes.filter((n) => ['rods', 'u', 'nfu', 'pellet'].includes(n.id)),
+        edges.filter(([s, t, item]) => item === WASTE || (s === 'rods' && t === 'u')),
+      ),
+      catalog,
+    )
+    expect(r.splits[0].edges.map((e) => e.perMin)).toEqual([expect.closeTo(20), expect.closeTo(20)])
+    expect(r.nodes.get('u')!.outputs[0]).toMatchObject({ produced: expect.closeTo(40), used: expect.closeTo(40) })
+  })
+
+  it('a waste chain sharing a Water Extractor with its reactors still gets the waste', () => {
+    // As in the whole nuclear chain: 4 uranium plants feed 2 plutonium plants, all on one pump group.
+    const [nodes, edges] = wasteChain(reactor('u', 'NuclearFuelRod', { power: 10000 }), reactor('pu', 'PlutoniumFuelRod', { power: 'max' }))
+    const r = solvePlan(
+      plan(
+        [...nodes, pump('w')],
+        [...edges, ['w', 'u', WATER], ['w', 'pu', WATER]],
+      ),
+      catalog,
+    )
+    expect(r.goals.map((g) => [g.id, g.achieved])).toEqual([
+      ['u', expect.closeTo(10000)],
+      ['pu', expect.closeTo(5000)],
+    ])
+    expect(r.nodes.get('w')!.activity).toBeCloseTo(6 * 240)
+    expect(r.nodes.get('u')!.outputs[0]).toMatchObject({ produced: expect.closeTo(40), used: expect.closeTo(40) })
+    expect(r.diagnostics.map((d) => d.message)).toEqual([expect.stringContaining('2 Plutonium Waste/min is left over')])
+  })
+
+  it('a flexible maker sharing a source with the chain it feeds is still pulled', () => {
+    const [nodes, edges] = wasteChain(reactor('u', 'NuclearFuelRod'), reactor('pu', 'PlutoniumFuelRod', { power: 5000 }))
+    const r = solvePlan(plan([...nodes, pump('w')], [...edges, ['w', 'u', WATER], ['w', 'pu', WATER]]), catalog)
+    expect(r.nodes.get('u')!.activity).toBeCloseTo(4)
+    expect(r.goals[0].achieved).toBeCloseTo(5000)
+  })
+
+  it('a limited source shared with an earlier stage gives the later one what is left', () => {
+    // 70 ore/min: the cell goal takes 50 first; the waste's Blender gets the other 20.
+    const r = solvePlan(
+      plan(
+        [
+          supplyNode('ore', ORE, 70),
+          recipeNode('cell', 'Recipe_UraniumCell_C', 'Build_Blender_C'),
+          goalNode('cells', 'Desc_UraniumCell_C', 25),
+          supplyNode('rods', 'Desc_NuclearFuelRod_C', 0, false),
+          reactor('u', 'NuclearFuelRod', { power: 10000 }),
+          recipeNode('fu', 'Recipe_Alternate_FertileUranium_C', 'Build_Blender_C'),
+        ],
+        [
+          ['ore', 'cell', ORE],
+          ['cell', 'cells', 'Desc_UraniumCell_C'],
+          ['rods', 'u', 'Desc_NuclearFuelRod_C'],
+          ['u', 'fu', WASTE],
+          ['ore', 'fu', ORE],
+        ],
+      ),
+      catalog,
+    )
+    expect(r.goals.map((g) => [g.id, g.achieved])).toEqual([
+      ['cells', expect.closeTo(25)],
+      ['u', expect.closeTo(10000)],
+      [expect.anything(), expect.closeTo(80)],
+    ])
+    expect(r.nodes.get('ore')!.activity).toBeCloseTo(70)
+    expect(r.nodes.get('ore')!.bottleneck).toBe(true)
+    expect(r.edges.get('e3')!.perMin).toBeCloseTo(20)
+  })
+})
