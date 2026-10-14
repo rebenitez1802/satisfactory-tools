@@ -468,7 +468,7 @@ on 2026-10-14. **Effort:** S–M.
   - A "Build cost" section in the summary: total items for the buildings
     the plan needs, counted whole (`ceil` per group, like the Buildings
     section), next to the power shards and Somersloops already listed.
-  - With #21: also "still to build", the cost of what isn't checked off yet.
+  - With #21: also "still to build", the cost of the nodes not marked done.
   - Maybe later: belts and pipes (their length isn't known), and splitters
     and mergers counted from the ⑂ / ⑃ badges.
 - **Implementation:** a pure `buildCost(plan, result, catalog)` in
@@ -483,27 +483,31 @@ on 2026-10-14. **Effort:** S–M.
 **Value:** keeps track of a plan while building it in the game, often
 across several sessions. Asked for by the user on 2026-10-14. **Effort:** S.
 
+- **What it is** (agreed with the user, 2026-10-14): a visual aid, one mark
+  per node meaning "I'm done with this node". Nothing more:
+  - Belts and pipes can't be marked.
+  - No partial progress: a node is done or not ("6 of 10 built" is out).
 - **UX:**
-  - Mark a node as **built**: a ✓ toggle on the card (a corner badge) and
-    in the inspector. Built cards get a green check and fade a little, so
-    what's left stands out.
-  - The summary shows progress, e.g. "12 of 30 groups built", and with #20
-    the cost of what's left.
-  - A "show what's left" view that dims everything built.
-  - Ask the user: can belts be marked too, and do big groups need a partial
-    count ("6 of 10 Constructors built")?
-- **Plans change after building.** Store how many machines were built when
-  the node was checked (`built?: number` on `PlanNodeBase`, optional so
-  saved plans keep loading). If the plan later needs more, the card says so:
-  "built 6, now needs 8".
+  - A ✓ toggle on the card (a corner badge) and in the inspector. Done cards
+    get a green check and fade a little, so what's left stands out.
+  - The summary shows progress, e.g. "12 of 30 nodes done", and with #20
+    the cost of what isn't done yet.
+  - Maybe a "show what's left" view that dims everything done.
+- **Nice to have: a warning when the plan changes.** If a node was marked
+  done with 6 machines and an edit later needs 8, the card warns "done with
+  6, now needs 8". For that, the mark stores the machine count at the time
+  (`done?: { count: number }` on `PlanNodeBase`, optional so saved plans
+  keep loading). The count is only for the warning; there is no way to enter
+  partial progress.
 - **Implementation:**
   - Not part of solving; `solvePlan` ignores it.
   - Set it through a helper in `edit.ts`, as one undo step. Duplicated or
-    pasted nodes start unbuilt.
+    pasted nodes start not done.
 - **Done when:** marks survive a reload and export/import, the summary shows
-  progress, and a node that needs more machines after an edit is flagged.
+  progress, and a done node that needs more machines after an edit is
+  flagged.
 - **Tests:** edit helper tests (toggle, copy clears it), and a screenshot of
-  built and unbuilt cards.
+  done and not-done cards.
 
 ### 10. 1.2 power multiplier
 
