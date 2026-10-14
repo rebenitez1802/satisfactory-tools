@@ -2,7 +2,8 @@
 
 Guide for AI coding agents (and humans) starting a fresh session in this repo.
 Read this first; `README.md` has the user-facing write-up of the load-balancer
-algorithm.
+algorithm. The production planner is specified in `docs/production-planner.md`
+(behaviour plus deferred follow-ups), and its game data in `docs/data-model.md`.
 
 ## What this is
 
@@ -19,7 +20,7 @@ browser.
 | Tool | Status | Entry point |
 | --- | --- | --- |
 | Load Balancer | Shipped (PR #1, polished in PR #2) | `src/components/LoadBalancerTool.tsx` |
-| Production Chains | Next on the roadmap; shown as a "soon" tab in `App.tsx` | — |
+| Production Chains | v1 shipped (PR #3); follow-ups in `docs/production-planner.md` | `src/components/planner/PlannerTool.tsx` |
 
 **Load Balancer:** given an input belt rate and a list of desired output rates,
 build a graph of splitters (1 → 2 or 3, even split) and mergers (≤3 → 1) that
@@ -28,9 +29,17 @@ feedback loops, as real in-game "odd" balancers do. If the outputs add up to
 less than the input, the remainder goes to an auto-added red **Leftover**
 output. Every generated graph is checked by a flow simulator before it is shown.
 
-**Production Chains (planned):** a recipe/production planner with
-**drag-and-drop editing right in the graph**. Hard requirement: the game-data
-model **must work with mods** (see "Production chains" below).
+**Production Chains:** a production planner edited **right in the graph**
+(React Flow). Nodes are machine groups: recipes, extractors on resource nodes,
+supplies and goals. Goals carry a 🎯 target or Max, any node can be ⛔
+limited, and the solver sizes the rest (forward, backward or both). Splits
+open a read-only load balancer. Plans live in tabs and autosave to
+localStorage. Game data comes from **mod-ready data packs** (see "Production
+chains" below).
+
+Tools are hash-routed (`#/planner`, `#/balancer`, see `src/useHashRoute.ts`).
+The balancer can be opened with rates prefilled:
+`#/balancer?in=120&out=90|Iron Plate&out=30|Iron Rod`.
 
 ## Tech stack
 
@@ -49,12 +58,17 @@ model **must work with mods** (see "Production chains" below).
 ```bash
 npm install
 npm run dev        # Vite dev server at http://localhost:5173/ (base "/")
-npm test           # vitest run — the solver suite
+npm test           # vitest run: balancer, catalog and planner suites
 npm run test:watch
 npm run typecheck  # tsc -b --noEmit
 npm run build      # tsc -b && vite build → dist/ (base "/satisfactory-tools/")
-npm run preview    # serve the built dist/ locally
+npm run preview    # serve the built dist/ locally (under /satisfactory-tools/)
+npm run data:base  # regenerate public/packs/base (game data + icons); needs Node ≥ 22.6
 ```
+
+`data:base` runs `scripts/*.ts` directly with Node's TypeScript type stripping,
+which is why it needs a newer Node than CI. CI never runs the scripts; the
+generated pack is committed.
 
 Before you call a change done, run `npm test` and `npm run build`. The build
 also type-checks, and CI runs the same two steps.
@@ -66,7 +80,8 @@ also type-checks, and CI runs the same two steps.
   It can also be started by hand (`workflow_dispatch`).
 - A failing test **blocks the deploy**.
 - GitHub Pages serves the site from a sub-path, so `vite.config.ts` sets
-  `base: '/satisfactory-tools/'` for builds only. Dev and test use `/`.
+  `base: '/satisfactory-tools/'` for builds and `vite preview`. Dev and test
+  use `/`.
   **Don't hard-code absolute asset paths** like `/foo.png`. Import assets
   through Vite, or prefix them with `import.meta.env.BASE_URL`.
 - One-time manual setting (already done): repo Settings → Pages → Source:
@@ -94,10 +109,19 @@ also type-checks, and CI runs the same two steps.
 ## Code map
 
 ```
+docs/                       data-model.md, production-planner.md (spec + follow-ups)
+scripts/                    Build-time importers (Node, not shipped): greeny data → base pack, wiki icons
+public/packs/base/          The base data pack: pack.json + icons/ (fetched at runtime)
 src/
   main.tsx                  React root
   App.tsx                   Header + tool tabs + footer; mounts the active tool
-  styles.css                All styling (dark theme, CSS variables)
+  useHashRoute.ts           #/planner, #/balancer routing
+  styles.css                Global styling (dark theme, CSS variables)
+  catalog/                  Game data, framework-free: types, pack format, buildCatalog merge, icon helpers
+  planner/                  Planner logic, framework-free: plan types, rates/power, solve.ts
+                            (targets & limits), create/edit/place helpers
+  components/planner/       Planner UI: PlannerTool (state, tabs, history), PlanCanvas (React Flow),
+                            nodes.tsx (cards), Inspector, Picker, RecipeSelect, BalancerPopup, planner.css
   components/
     LoadBalancerTool.tsx    Left panel UI (input, outputs, belt tier, toggles) → calls solve()
     GraphView.tsx           React Flow canvas: custom node/edge types, handle
@@ -149,31 +173,29 @@ checks that every sink gets its target rate, or `solve` returns `ok: false` →
   **connected** outputs (2 or 3); a merger takes up to 3 inputs. Belt tiers
   (parts/min): Mk.1 60, Mk.2 120, Mk.3 270, Mk.4 480, Mk.5 780, Mk.6 1200.
 
-## Production chains: requirements for the next tool
+## Production chains: how it's built
 
-These were agreed with the user (2026-10-13) and should shape the design:
+Requirements agreed with the user (2026-10-13), now implemented:
 
-- **Mod-extensible game data is a hard requirement.** Users must be able to
-  add new machines, resources, and recipes from mods.
-  - Use a data-driven catalog loaded from **data packs**: a base-game pack plus
-    optional mod packs that can be swapped or stacked, with later packs adding
-    to or overriding earlier ones.
-  - **Don't** hard-code TypeScript union types of item or machine names, and
-    don't put game data in `switch` statements. Identify things by string IDs
-    from the data.
-  - Icons come with each pack, with a **placeholder fallback** for anything
-    missing.
-- Editing happens **in the graph**: drag, drop, and connect nodes in React
-  Flow, not only through side-panel forms.
-- Planning logic stays framework-agnostic and tested, like `src/solver/`.
-- Research so far:
-  - Icons for base-game items and buildings were pulled from
-    `satisfactory.wiki.gg` into `.context/research/icons/`. That folder is
-    local to one workspace and gitignored; scripts are in `_scripts/`.
-  - The base data came from the community `data1.0.json` dataset used by
-    greeny's SatisfactoryTools, keyed by class names like `Desc_IronPlate_C`.
-  - Check licensing and attribution before committing any game art or data
-    into the repo.
+- **Mod-extensible game data is a hard requirement.** Content comes from data
+  packs (`src/catalog/pack.ts`): a base pack plus optional mod packs that add,
+  patch or remove entities. Ids are namespaced: `base:Desc_IronIngot_C`.
+  - **Don't** hard-code TypeScript unions of item or machine names, and don't
+    put game data in `switch` statements. Machine abilities (overclock,
+    Somersloop slots, extraction, ports, the items that go in upgrade slots)
+    are data on the machine.
+  - Icons come with each pack; `Icon` falls back to an initials placeholder.
+  - The base pack is generated by `npm run data:base` from greeny's
+    `data1.0.json` (MIT, pinned commit) plus `scripts/base-overlay.ts`. Icons
+    are from satisfactory.wiki.gg (© Coffee Stain), credited in the footer.
+- **Editing happens in the graph**, with an inspector for details.
+- **The solver** (`src/planner/solve.ts`) is the source of truth for rates.
+  Its rules, including targets, limits, open ends and fair shares between Max
+  goals, are in `docs/production-planner.md`. Change the doc and the tests
+  with the code.
+- Vanilla math lives in `src/planner/rates.ts`. Power scales with
+  clock^1.321929, and Somersloops multiply power by (1 + filled/slots)². Slots
+  can be partly filled.
 
 ## Gotchas
 
@@ -187,3 +209,16 @@ These were agreed with the user (2026-10-13) and should shape the design:
   This is on purpose, so input and outputs read clearly.
 - The `.context/` folder is gitignored. Don't keep anything there that other
   sessions need. Durable notes belong in this file or in the repo.
+- `planner.css` loads **before** `styles.css`, because `main.tsx` imports
+  `App` first. Planner rules that override global ones need a second class,
+  e.g. `.tool.pn-tool`.
+- React Flow stops pointer events on the canvas and on nodes from bubbling.
+  "Click outside to close" listeners must use the **capture** phase
+  (`addEventListener('pointerdown', fn, true)`).
+- Don't read refs that are updated during render from inside a state
+  updater. StrictMode re-runs updaters after the next render, and they see
+  the new ref value. Compute the next state in the event handler instead (see
+  tab Undo in `PlannerTool.tsx`).
+- Planner handles are ids `in:<itemId>` / `out:<itemId>`, and each one covers
+  its whole item icon. Connection gestures are handled in `PlanCanvas.tsx`
+  (`onConnectStart`/`onConnectEnd`, `nodeAt`).
