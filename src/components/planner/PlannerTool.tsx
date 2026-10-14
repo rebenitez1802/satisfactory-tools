@@ -262,6 +262,14 @@ function Planner() {
     (patch: Partial<PlanSettings>) => setPlan((p) => ({ ...p, settings: { ...p.settings, ...patch } })),
     [setPlan],
   )
+  const setAvoid = useCallback(
+    (avoid: ItemId[]) =>
+      setPlan((p) => {
+        const { avoid: _, ...settings } = p.settings
+        return { ...p, settings: avoid.length ? { ...settings, avoid } : settings }
+      }),
+    [setPlan],
+  )
 
   const ctx: PlannerContextValue = useMemo(
     () => ({
@@ -324,6 +332,7 @@ function Planner() {
             onBuildReuse={(buildReuse) => updatePrefs({ buildReuse })}
             onBuild={(item) => canvas.current?.buildChain(missingInputs(plan, catalog, result, { item }))}
             onEditWorld={() => setShowWorld(true)}
+            onAvoid={setAvoid}
           />
         </section>
         <section className="panel graph-panel pn-graph-panel">
@@ -369,6 +378,7 @@ function Planner() {
           alternates={alternates}
           objective={prefs.optimizeFor}
           onObjective={(optimizeFor) => updatePrefs({ optimizeFor })}
+          onAvoid={setAvoid}
           onApply={(next) => {
             canvas.current?.replace(next)
             setShowOptimize(false)

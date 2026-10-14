@@ -26,6 +26,11 @@ export interface PlanSettings {
    * nodes around). Absent: the default map's.
    */
   world?: WorldSite[]
+  /**
+   * Raw resources ✨ Optimize and ⚡ Build chain shouldn't mine anew ("build
+   * this without oil"). The plan's own extractors and supplies still count.
+   */
+  avoid?: ItemId[]
 }
 
 interface PlanNodeBase {

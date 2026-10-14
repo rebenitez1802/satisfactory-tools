@@ -6,6 +6,7 @@ import { useEffect, useMemo, type ReactNode } from 'react'
 import type { Catalog, ItemId } from '../../catalog'
 import { newNodeId, optimize, solvePlan, worldUsage } from '../../planner'
 import type { Objective, Plan, SolveResult } from '../../planner'
+import { AvoidChips } from './AvoidChips'
 import { fmt, mw } from './format'
 import { Icon } from './Icon'
 
@@ -25,6 +26,7 @@ export function OptimizeModal({
   alternates,
   objective,
   onObjective,
+  onAvoid,
   onApply,
   onClose,
 }: {
@@ -36,6 +38,8 @@ export function OptimizeModal({
   alternates: string
   objective: Objective
   onObjective: (objective: Objective) => void
+  /** The plan's "Don't use" list. */
+  onAvoid: (avoid: ItemId[]) => void
   onApply: (plan: Plan) => void
   onClose: () => void
 }) {
@@ -72,6 +76,14 @@ export function OptimizeModal({
             ))}
           </div>
           <p className="pn-dim pn-opt-hint">{OBJECTIVES.find(([o]) => o === objective)![2]}</p>
+          <div className="pn-opt-avoid">
+            <div className="pn-opt-sub">Don't use</div>
+            <AvoidChips catalog={catalog} avoid={plan.settings.avoid ?? []} onChange={onAvoid} />
+            <p className="pn-dim pn-opt-hint">
+              No new extractors for these; the plan's own extractors and supplies still count. Saved with this plan, and ⚡ Build chain
+              follows it too.
+            </p>
+          </div>
           {!proposal.ok || !after ? (
             <div className="warning error">{proposal.message}</div>
           ) : (

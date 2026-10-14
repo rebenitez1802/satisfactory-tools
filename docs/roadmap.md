@@ -37,7 +37,7 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | 19 | [Balancer with several inputs](#19-balancer-with-several-inputs) | M2 | Med–High | M | Planned, after #4 |
 | 20 | [Build cost](#20-build-cost) | M2 | Med–High | S–M | Done (PR #12) |
 | 21 | [Build checklist](#21-build-checklist) | M2 | High | S | Done (PR #12) |
-| 22 | [Resources to avoid](#22-resources-to-avoid) | M2 | High | S | Planned |
+| 22 | [Resources to avoid](#22-resources-to-avoid) | M2 | High | S | Done (PR #19) |
 | 23 | [Lock standard recipes](#23-lock-standard-recipes) | M2 | Medium | XS–S | Planned |
 | 24 | [Game progress](#24-game-progress) | M2 | High | M | Planned, after #23 |
 | 25 | [Byproduct makers shared between stages](#25-byproduct-makers-shared-between-stages) | M3 | Medium | M | Later |
@@ -62,7 +62,8 @@ and useful straight away while playing. Reorder freely.
 | 3 | Build in game | #21, #20 | Done (PR #12). |
 | 4 | Byproduct loops | #16 | Done (PR #15), without the LP: loops are solved with the spare-byproduct rule. Isolated because it changes rates. |
 | 5 | Optimize | #6, #11 | Done (PR #17), after a solver fix it needed (PR #16: byproducts feeding their maker's own goal). |
-| 6 | Plan for your game | #22, #23, #24 | From the user's testing of #6 (2026-10-14): "build this without oil", and plan early in the game with only what's unlocked. #22 first (it covers the oil case alone), then #23, which #24 builds on. |
+| 6a | Resources to avoid | #22 | Done (PR #19). From the user's testing of #6 (2026-10-14): "build this without oil". Split from 6b on 2026-10-14: it covers the oil case alone and touches Optimize and Build chain, not prefs. |
+| 6b | Game progress | #23, #24 | Plan early in the game with only what's unlocked. Together because both reshape the Recipes dialog and prefs (one migration, `lockedAlternates` → `lockedRecipes` plus progress); #23 alone is mostly groundwork for #24. |
 | 7 | Real belts | #19, #18 | Both turn one logical flow into belts you can build, and share a helper that puts machines onto belts. Builds on #4's belt counts. |
 | 8 | Use leftovers | #17 | Builds on #2 (adding nodes) and #6 (ranking suggestions). |
 | any time | Small standalones | #9, #15, #14 | Independent; slot one in between the big ones. |
@@ -577,6 +578,11 @@ across several sessions. Asked for by the user on 2026-10-14. **Effort:** S.
   done and not-done cards.
 
 ### 22. Resources to avoid
+
+**Done.** Its behaviour is in [production-planner.md](production-planner.md)
+("Don't use", under ✨ Optimize and ⚡ Build chain). ⚡ Build chain follows
+the same per-plan list, and the list is also in the summary's Settings, so
+it can be set without opening Optimize. The original notes:
 
 **Value:** "build this factory without oil". Today the only ways are locking
 every oil recipe (dozens, and locks apply to every plan) or setting Crude

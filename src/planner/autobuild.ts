@@ -16,6 +16,11 @@
 //   the recipe steps down to raw resources, which steers clear of
 //   unpackaging (Unpackage Fuel needs Packaged Fuel, which needs Fuel) and
 //   residue recipes when a direct one exists.
+// - Resources the plan avoids (`PlanSettings.avoid`, "build this without
+//   oil") are never mined anew: recipes whose chain can do without them come
+//   first, in the same order, and an avoided resource the chain still needs
+//   ends at a supply node, so it shows as brought in. The plan's own
+//   extractors and supplies of it are what the player has, and still count.
 // - Byproducts are left unconnected: they show up as spare output.
 // - Recipe loops can't recurse forever: a recipe that eats an item already
 //   being built further down the line is skipped, and the walk stops at
@@ -142,37 +147,80 @@ export function bestExtractor(catalog: Catalog, item: ItemId): Machine | undefin
   return ms.sort((a, b) => rank(b) - rank(a))[0]
 }
 
-export interface ChooseOptions extends Pick<BuildOptions, 'isRecipeHidden' | 'preferred'> {
-  /** Items being built further down the line; recipes eating them would loop. */
-  avoid?: ReadonlySet<ItemId>
-  /** Precomputed `itemCosts`, reused across calls in one build. */
-  costs?: ReadonlyMap<ItemId, number>
+/**
+ * Raw resources the plan says not to use (`PlanSettings.avoid`), less those
+ * it has its own extractor or supply for: those are what the player has.
+ */
+export function avoidedResources(plan: Plan, catalog: Catalog): Set<ItemId> {
+  const list = Array.isArray(plan.settings.avoid) ? plan.settings.avoid : []
+  const has = new Set(plan.nodes.flatMap((n) => (n.kind === 'extractor' ? [n.resource] : n.kind === 'supply' ? [n.item] : [])))
+  return new Set(list.filter((item) => catalog.extractorsFor.has(item) && !has.has(item)))
 }
 
 /**
- * What a new node making `item` should be: an extractor for raw resources,
- * else the player's remembered recipe, the simplest standard recipe whose main
- * product is the item, the simplest unlocked alternate, or a supply node.
+ * Items a chain can get without the avoided resources: other raw resources,
+ * items no usable recipe makes (they come from supply nodes), and the main
+ * products of recipes whose inputs can all be had.
+ */
+function obtainable(catalog: Catalog, usable: (r: Recipe) => boolean, avoid: ReadonlySet<ItemId>): Set<ItemId> {
+  const recipes = [...catalog.recipes.values()].filter(usable)
+  const made = new Set(recipes.map((r) => r.outputs[0]?.item))
+  const got = new Set([...catalog.items.keys()].filter((id) => (catalog.extractorsFor.has(id) ? !avoid.has(id) : !made.has(id))))
+  for (let changed = true; changed; ) {
+    changed = false
+    for (const r of recipes) {
+      const item = r.outputs[0]?.item
+      if (item && !got.has(item) && r.inputs.every((a) => got.has(a.item))) {
+        got.add(item)
+        changed = true
+      }
+    }
+  }
+  return got
+}
+
+export interface ChooseOptions extends Pick<BuildOptions, 'isRecipeHidden' | 'preferred'> {
+  /** Items being built further down the line; recipes eating them would loop. */
+  path?: ReadonlySet<ItemId>
+  /** Raw resources not to mine (`avoidedResources`). */
+  avoid?: ReadonlySet<ItemId>
+  /** Precomputed `itemCosts`, reused across calls in one build. */
+  costs?: ReadonlyMap<ItemId, number>
+  /** Precomputed `obtainable` for `avoid`, reused across calls in one build. */
+  clean?: ReadonlySet<ItemId>
+}
+
+/**
+ * What a new node making `item` should be: an extractor for raw resources
+ * (a supply node if the resource is avoided), else the player's remembered
+ * recipe, the simplest standard recipe whose main product is the item, the
+ * simplest unlocked alternate, or a supply node. With resources to avoid,
+ * recipes that can do without them go first, in that same order.
  */
 export function chooseProducer(catalog: Catalog, item: ItemId, opts: ChooseOptions = {}): PickOption | undefined {
   const it = catalog.items.get(item)
   if (!it) return undefined
   const machine = bestExtractor(catalog, item)
-  if (machine) return { kind: 'extractor', machine, resource: it }
+  if (machine) return opts.avoid?.has(item) ? { kind: 'supply', item: it } : { kind: 'extractor', machine, resource: it }
 
   const usable = (r: Recipe) => !isGenerator(catalog, r) && !opts.isRecipeHidden?.(r.id)
   const costs = opts.costs ?? itemCosts(catalog, usable)
   const fits = (r: Recipe | undefined): r is Recipe =>
-    !!r && r.outputs[0]?.item === item && usable(r) && r.inputs.every((a) => a.item !== item && !opts.avoid?.has(a.item))
+    !!r && r.outputs[0]?.item === item && usable(r) && r.inputs.every((a) => a.item !== item && !opts.path?.has(a.item))
 
   const preferred = catalog.recipes.get(opts.preferred?.[item] ?? '')
-  if (fits(preferred)) return { kind: 'recipe', recipe: preferred }
-
   const candidates = (catalog.recipesProducing.get(item) ?? []).map((id) => catalog.recipes.get(id)).filter(fits)
   // Stable sort: equally simple recipes keep the catalog's order.
   const simplest = (rs: Recipe[]) => [...rs].sort((a, b) => recipeCost(a, costs) - recipeCost(b, costs))[0]
-  const recipe = simplest(candidates.filter((r) => !r.alternate)) ?? simplest(candidates.filter((r) => r.alternate))
-  return recipe ? { kind: 'recipe', recipe } : { kind: 'supply', item: it }
+  const clean = opts.avoid?.size ? (opts.clean ?? obtainable(catalog, usable, opts.avoid)) : undefined
+  const tiers: ((r: Recipe) => boolean)[] = [...(clean ? [(r: Recipe) => r.inputs.every((a) => clean.has(a.item))] : []), () => true]
+  for (const ok of tiers) {
+    if (fits(preferred) && ok(preferred)) return { kind: 'recipe', recipe: preferred }
+    const rs = candidates.filter(ok)
+    const recipe = simplest(rs.filter((r) => !r.alternate)) ?? simplest(rs.filter((r) => r.alternate))
+    if (recipe) return { kind: 'recipe', recipe }
+  }
+  return { kind: 'supply', item: it }
 }
 
 /** Nodes reachable from `id` along belts (its consumers, theirs, …), including itself. */
@@ -205,6 +253,8 @@ export function buildUpstream(
   const reuse = opts.reuse ?? true
   const usable = (r: Recipe) => !isGenerator(catalog, r) && !opts.isRecipeHidden?.(r.id)
   const costs = itemCosts(catalog, usable)
+  const avoid = avoidedResources(plan, catalog)
+  const clean = avoid.size ? obtainable(catalog, usable, avoid) : undefined
   let p = plan
   const added: string[] = []
 
@@ -236,7 +286,7 @@ export function buildUpstream(
     const option =
       depth >= MAX_DEPTH
         ? catalog.items.has(item) && ({ kind: 'supply', item: catalog.items.get(item)! } as const)
-        : chooseProducer(catalog, item, { ...opts, costs, avoid: path })
+        : chooseProducer(catalog, item, { ...opts, costs, path, avoid, clean })
     if (!option) return
     const at = p.nodes.find((n) => n.id === consumer)!.position
     const siblings = p.edges.filter((e) => e.target === consumer).length

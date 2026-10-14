@@ -1,6 +1,7 @@
 import type { Catalog, ItemId } from '../../catalog'
 import { buildCost, worldUsage } from '../../planner'
 import type { ItemRate, MachineMode, Plan, PlanSettings, SolveResult } from '../../planner'
+import { AvoidChips } from './AvoidChips'
 import { fmt, mw, pct, tierName } from './format'
 import { Icon } from './Icon'
 import { nodeLabel } from './labels'
@@ -20,6 +21,7 @@ export function PlanSummary({
   onBuildReuse,
   onBuild,
   onEditWorld,
+  onAvoid,
 }: {
   plan: Plan
   result: SolveResult
@@ -36,6 +38,8 @@ export function PlanSummary({
   onBuild: (item?: ItemId) => void
   /** Opens the world node counts. */
   onEditWorld: () => void
+  /** Sets the plan's "Don't use" list. */
+  onAvoid: (avoid: ItemId[]) => void
 }) {
   const { totals } = result
   const net = totals.generatedMw - totals.powerMw
@@ -241,6 +245,12 @@ export function PlanSummary({
               </button>
             ))}
           </div>
+        </div>
+        <div className="field">
+          <span title="✨ Optimize and ⚡ Build chain add no new extractors for these. The plan's own extractors and supplies still count.">
+            Don't use
+          </span>
+          <AvoidChips catalog={catalog} avoid={plan.settings.avoid ?? []} onChange={onAvoid} />
         </div>
         <div className="field">
           <span>World nodes</span>

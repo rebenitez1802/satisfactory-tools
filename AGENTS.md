@@ -41,7 +41,9 @@ target or Max; the summary shows power used, made and net. Spare byproducts
 (nuclear waste, heavy oil residue, …) flow on into the chains they feed. ⚡ Build
 chain fills a goal or missing input back to raw resources. ✨ Optimize picks
 the best recipes for the plan's goals with a linear program, weighing raw
-resources by how many nodes the map has, and previews the change. Splits
+resources by how many nodes the map has, and previews the change. A plan
+can list resources not to use ("build this without oil"), which ✨ Optimize
+and ⚡ Build chain both follow. Splits
 open a read-only load balancer. A build checklist (✓ on each card) and the
 build cost help while building the plan in the game. Plans live in tabs and autosave to
 localStorage. Game data comes from **mod-ready data packs** (see "Production
