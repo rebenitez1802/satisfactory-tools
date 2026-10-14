@@ -14,6 +14,7 @@ import {
   type IsValidConnection,
   type NodeChange,
   type OnConnectStartParams,
+  type XYPosition,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import type { Catalog, ItemId } from '../../catalog'
@@ -91,6 +92,9 @@ interface PickerState {
 const FIT_VIEW = { padding: 0.15, maxZoom: 1, minZoom: 0.55 }
 const MIN_ZOOM = 0.3
 
+/** Room left around a card panned into view, in screen pixels. */
+const REVEAL_MARGIN = 24
+
 /**
  * The plan graph on a React Flow canvas. The plan is the source of truth:
  * React Flow keeps its own node list only for drag/selection/measurement, and
@@ -112,10 +116,12 @@ export function PlanCanvas({
   const [rfNodes, setRfNodes] = useState<PlanFlowNode[]>(() =>
     plan.nodes.map((node) => ({ id: node.id, type: node.kind, position: node.position, data: { node } })),
   )
+  const rfNodesRef = useRef(rfNodes)
+  rfNodesRef.current = rfNodes
   const [selectedEdges, setSelectedEdges] = useState<Set<string>>(new Set())
   const [picker, setPicker] = useState<PickerState | null>(null)
   const wrapper = useRef<HTMLDivElement>(null)
-  const { screenToFlowPosition, flowToScreenPosition, getViewport, setCenter, fitView } = useReactFlow()
+  const { screenToFlowPosition, getViewport, setViewport, fitView } = useReactFlow()
   const { catalog, isRecipeHidden, build, rememberRecipe } = usePlanner()
 
   // Nodes to select after the next rebuild (freshly pasted or duplicated ones).
@@ -158,7 +164,7 @@ export function PlanCanvas({
           targetHandle: inHandle(e.item),
           type: 'flow',
           selected: selectedEdges.has(e.id),
-          data: { item: e.item, perMin: r?.perMin ?? 0, overCapacity: r?.overCapacity },
+          data: { item: e.item, perMin: r?.perMin ?? 0, belts: r?.belts, tooFast: r?.tooFast },
         }
       }),
     [plan.edges, result, selectedEdges, pickedUp],
@@ -245,6 +251,52 @@ export function PlanCanvas({
       onSelectionChange({ nodes: nodes.map((n) => n.id), edges: edges.map((e) => e.id) }),
     [onSelectionChange],
   )
+
+  /**
+   * Pan just enough that these nodes are inside the canvas, with a margin.
+   * The inspector docks on the right and narrows the canvas, so a card
+   * selected near the right edge would otherwise end up behind it. If they
+   * don't all fit, their top-left corner wins.
+   */
+  const reveal = useCallback(
+    (nodes: { id: string; position: XYPosition }[]) => {
+      const box = wrapper.current?.getBoundingClientRect()
+      if (!box || !nodes.length) return
+      const { x, y, zoom } = getViewport()
+      const sizes = new Map(rfNodesRef.current.map((n) => [n.id, n.measured]))
+      const rect = { l: Infinity, t: Infinity, r: -Infinity, b: -Infinity }
+      for (const n of nodes) {
+        const size = sizes.get(n.id)
+        rect.l = Math.min(rect.l, n.position.x * zoom + x)
+        rect.t = Math.min(rect.t, n.position.y * zoom + y)
+        rect.r = Math.max(rect.r, (n.position.x + (size?.width ?? CARD_W)) * zoom + x)
+        rect.b = Math.max(rect.b, (n.position.y + (size?.height ?? 110)) * zoom + y)
+      }
+      const shift = (lo: number, hi: number, size: number) => {
+        const d = hi > size - REVEAL_MARGIN ? size - REVEAL_MARGIN - hi : 0
+        return lo + d < REVEAL_MARGIN ? REVEAL_MARGIN - lo : d
+      }
+      const dx = shift(rect.l, rect.r, box.width)
+      const dy = shift(rect.t, rect.b, box.height)
+      if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) setViewport({ x: x + dx, y: y + dy, zoom }, { duration: 300 })
+    },
+    [getViewport, setViewport],
+  )
+
+  // When the canvas narrows (the inspector opening), keep the selection in view.
+  useEffect(() => {
+    const el = wrapper.current
+    if (!el) return
+    let width = el.clientWidth
+    const observer = new ResizeObserver(() => {
+      const narrower = el.clientWidth < width - 1
+      width = el.clientWidth
+      const selected = rfNodesRef.current.filter((n) => n.selected)
+      if (narrower && selected.length && !selected.some((n) => n.dragging)) reveal(selected)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [reveal])
 
   /** Open the picker at a screen point (clamped so it stays on the canvas). */
   const openPicker = useCallback(
@@ -357,22 +409,13 @@ export function PlanCanvas({
       setPlan((p) => ({ ...p, nodes: [...p.nodes, node], edges: edge ? [...p.edges, edge] : p.edges }))
       setPicker(null)
       // Once the inspector has opened (and the canvas narrowed), bring the new node into view.
-      setTimeout(() => {
-        const box = wrapper.current?.getBoundingClientRect()
-        if (!box) return
-        const tl = flowToScreenPosition(node.position)
-        const br = flowToScreenPosition({ x: node.position.x + CARD_W, y: node.position.y + 110 })
-        const visible = tl.x >= box.left && tl.y >= box.top && br.x <= box.right && br.y <= box.bottom
-        if (!visible) setCenter(node.position.x + CARD_W / 2, node.position.y + 55, { zoom: getViewport().zoom, duration: 300 })
-      }, 60)
+      setTimeout(() => reveal([{ id: node.id, position: node.position }]), 60)
     },
-    [picker, catalog, setPlan, flowToScreenPosition, getViewport, setCenter, rememberRecipe],
+    [picker, catalog, setPlan, reveal, rememberRecipe],
   )
 
   // Ctrl/⌘+C / V copy and paste the selected nodes with the belts between
   // them; Ctrl/⌘+D duplicates in one go. Skipped while typing in a field.
-  const rfNodesRef = useRef(rfNodes)
-  rfNodesRef.current = rfNodes
   const planRef = useRef(plan)
   planRef.current = plan
   useEffect(() => {

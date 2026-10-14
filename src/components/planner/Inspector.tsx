@@ -8,16 +8,20 @@ import {
   maxClock,
   openInputs,
   minClock,
+  nodeRate,
   outputMultiplier,
+  recipeAtRate,
+  recipeItem,
   sameProductRecipes,
   shardsNeeded,
   sloopSlots,
 } from '../../planner'
-import type { ExtractorNode, GoalNode, NodeResult, Plan, PlanEdge, PlanNode, RecipeNode, SolveResult, SupplyNode } from '../../planner'
-import { fmt, mw, pct } from './format'
+import type { EdgeResult, ExtractorNode, GoalNode, MachineMode, NodeResult, Plan, PlanEdge, PlanNode, RecipeNode, SolveResult, SupplyNode } from '../../planner'
+import { fmt, mw, pct, tierName } from './format'
 import { Icon } from './Icon'
 import { nodeLabel } from './labels'
 import { NumberField } from './NumberField'
+import { tooFastText } from './FlowEdge'
 import { RecipeSelect } from './RecipeSelect'
 import { upgradeItems, UpgradeChip } from './Upgrades'
 
@@ -40,9 +44,16 @@ interface InspectorProps {
   actions: InspectorActions
   /** Recipes hidden from pickers (locked alternates); still shown when already in use. */
   isRecipeHidden: (id: string) => boolean
+  /** Whether the recipe dropdown compares options at the node's rate rather than per machine (a preference). */
+  compare: RecipeCompare
 }
 
-export function Inspector({ plan, result, catalog, selection, actions, isRecipeHidden }: InspectorProps) {
+export interface RecipeCompare {
+  atRate: boolean
+  setAtRate: (atRate: boolean) => void
+}
+
+export function Inspector({ plan, result, catalog, selection, actions, isRecipeHidden, compare }: InspectorProps) {
   if (selection.nodes.length === 1 && selection.edges.length === 0) {
     const node = plan.nodes.find((n) => n.id === selection.nodes[0])
     if (!node) return null
@@ -56,6 +67,8 @@ export function Inspector({ plan, result, catalog, selection, actions, isRecipeH
           catalog={catalog}
           actions={actions}
           isRecipeHidden={isRecipeHidden}
+          mode={plan.settings.machineMode}
+          compare={compare}
         />
       </aside>
     )
@@ -132,6 +145,8 @@ function NodeInspector({
   catalog,
   actions,
   isRecipeHidden,
+  mode,
+  compare,
 }: {
   node: PlanNode
   /** Inputs with no belt yet. */
@@ -140,6 +155,8 @@ function NodeInspector({
   catalog: Catalog
   actions: InspectorActions
   isRecipeHidden: (id: string) => boolean
+  mode: MachineMode
+  compare: RecipeCompare
 }) {
   const res = result.nodes.get(node.id)
   return (
@@ -157,7 +174,7 @@ function NodeInspector({
         </div>
       )}
       {node.kind === 'recipe' && (
-        <RecipeFields node={node} res={res} catalog={catalog} actions={actions} isRecipeHidden={isRecipeHidden} />
+        <RecipeFields node={node} res={res} catalog={catalog} actions={actions} isRecipeHidden={isRecipeHidden} mode={mode} compare={compare} />
       )}
       {node.kind === 'extractor' && <ExtractorFields node={node} catalog={catalog} actions={actions} />}
       {node.kind === 'supply' && <SupplyFields node={node} actions={actions} />}
@@ -244,12 +261,16 @@ function RecipeFields({
   catalog,
   actions,
   isRecipeHidden,
+  mode,
+  compare,
 }: {
   node: RecipeNode
   res: NodeResult | undefined
   catalog: Catalog
   actions: InspectorActions
   isRecipeHidden: (id: string) => boolean
+  mode: MachineMode
+  compare: RecipeCompare
 }) {
   const recipe = catalog.recipes.get(node.recipe)
   const machine = catalog.machines.get(node.machine)
@@ -261,14 +282,40 @@ function RecipeFields({
   const boost = outputMultiplier(machine, node.sloops)
   const shards = shardsNeeded(machine, node.clock)
   const upgrades = upgradeItems(machine, catalog)
+  // Options can be compared at what this node makes now, when it makes anything.
+  const rate = options.length > 1 ? nodeRate(catalog, node, res) : undefined
+  const atRate = rate !== undefined && compare.atRate
+  const rateLabel = machine.generation
+    ? mw(res?.generatedMw ?? 0)
+    : `${fmt(rate ?? 0)}${catalog.items.get(recipeItem(catalog, recipe) ?? '')?.form === 'solid' ? '' : ' m³'}/min`
 
   return (
     <>
       <Field
         label={machine.generation ? 'Fuel' : 'Recipe'}
-        hint={options.length > 1 ? 'Per machine at 100%. Hover an icon for the item name.' : undefined}
+        hint={
+          options.length > 1
+            ? `${atRate ? `Each option sized to make ${rateLabel}, with its machines and power.` : 'Per machine at 100%.'} Hover an icon for the item name.`
+            : undefined
+        }
       >
-        <RecipeSelect value={node.recipe} options={options} catalog={catalog} onChange={(id) => actions.setRecipe(node.id, id)} />
+        {rate !== undefined && (
+          <div className="seg pn-seg-small">
+            <button type="button" className={atRate ? '' : 'active'} onClick={() => compare.setAtRate(false)}>
+              Per machine
+            </button>
+            <button type="button" className={atRate ? 'active' : ''} onClick={() => compare.setAtRate(true)}>
+              At {rateLabel}
+            </button>
+          </div>
+        )}
+        <RecipeSelect
+          value={node.recipe}
+          options={options}
+          catalog={catalog}
+          onChange={(id) => actions.setRecipe(node.id, id)}
+          at={atRate ? (r) => recipeAtRate(catalog, node, r, rate!, mode) : undefined}
+        />
       </Field>
       {recipe.machines.length > 1 ? (
         <Field label="Machine">
@@ -575,6 +622,26 @@ function GoalFields({ node, achieved, actions }: { node: GoalNode; achieved: num
   )
 }
 
+/** How many belts or pipes of the plan's tier the edge takes, or why it can't be built on that tier. */
+function BeltCount({ r, fluid, plan, catalog }: { r: EdgeResult; fluid: boolean; plan: Plan; catalog: Catalog }) {
+  const kind = fluid ? 'pipe' : 'belt'
+  const unit = fluid ? ' m³' : ''
+  if (r.tooFast) {
+    const planTier = catalog.transportTiers.get((fluid ? plan.settings.pipeTier : plan.settings.beltTier) ?? '')
+    const needs = r.tooFast.needs ? catalog.transportTiers.get(r.tooFast.needs) : undefined
+    return planTier ? <div className="pn-bad">{tooFastText(r.tooFast, tierName(planTier), needs && tierName(needs), kind, unit)}</div> : null
+  }
+  const tier = r.belts && catalog.transportTiers.get(r.belts.tier)
+  if (!r.belts || !tier) return null
+  const { count } = r.belts
+  return (
+    <div className="pn-dim">
+      {count === 1 ? `Fits one ${tierName(tier)} ${kind}` : `${count}× ${tierName(tier)} ${kind}s`} ({fmt(tier.ratePerMin)}
+      {unit}/min each)
+    </div>
+  )
+}
+
 function EdgeInspector({
   edge,
   plan,
@@ -608,7 +675,7 @@ function EdgeInspector({
           {fmt(r?.perMin ?? 0)}
           {item && item.form !== 'solid' ? ' m³' : ''}/min
         </div>
-        {r?.overCapacity !== undefined && <div className="pn-bad">Over the {fmt(r.overCapacity)}/min limit</div>}
+        {r && <BeltCount r={r} fluid={!!item && item.form !== 'solid'} plan={plan} catalog={catalog} />}
       </div>
       {siblings.length > 1 && (
         <Field label="Share of demand" hint={`${siblings.length} belts feed this input; demand is split by share.`}>

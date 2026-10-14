@@ -281,10 +281,86 @@ describe('solver', () => {
     expect(r.nodes.get('plate')!.powerMw).toBeCloseTo(4 * 4 * 2.5 ** 1.321929)
   })
 
-  it('warns when a belt is over capacity', () => {
-    const r = ironChain(miner90(true), 'max', { plan: { settings: { machineMode: 'fractional', beltTier: 'base:Build_ConveyorBeltMk1_C' } } })
-    expect(r.edges.get('e0')).toEqual({ perMin: 90, overCapacity: 60 })
-    expect(r.edges.get('e2')!.overCapacity).toBeUndefined()
+  it('counts the belts of the plan tier an edge needs', () => {
+    const mk1 = { settings: { machineMode: 'fractional' as const, beltTier: 'base:Build_ConveyorBeltMk1_C' } }
+    const r = ironChain(supplyNode('ore', ORE, 0, false), 150, { plan: mk1 })
+    // 225 ore, 225 ingots, 150 plates on 60/min belts.
+    expect(r.edges.get('e0')).toEqual({ perMin: 225, belts: { tier: 'base:Build_ConveyorBeltMk1_C', count: 4 } })
+    expect(r.edges.get('e1')!.belts!.count).toBe(4)
+    expect(r.edges.get('e2')!.belts!.count).toBe(3)
+    // 7.5 smelters at 30 ingots/min each: every one fits a belt.
+    expect(r.edges.get('e1')!.tooFast).toBeUndefined()
+    // Exactly one belt's worth is one belt.
+    expect(ironChain(supplyNode('ore', ORE, 0, false), 40, { plan: mk1 }).edges.get('e2')!.belts!.count).toBe(1)
+  })
+
+  it('has no belt counts without a tier', () => {
+    const r = ironChain(supplyNode('ore', ORE, 0, false), 150)
+    expect(r.edges.get('e0')).toEqual({ perMin: 225 })
+  })
+
+  it('has no belt count when one machine makes more than a belt carries', () => {
+    const mk1 = { settings: { machineMode: 'fractional' as const, beltTier: 'base:Build_ConveyorBeltMk1_C' } }
+    // A limited Mk.1 miner at 150% makes 90 ore/min on its own: two Mk.1 belts can't carry it.
+    const r = ironChain(miner90(true), 'max', { plan: mk1 })
+    expect(r.edges.get('e0')).toEqual({ perMin: 90, tooFast: { perMin: 90, end: 'out', needs: 'base:Build_ConveyorBeltMk2_C' } })
+    expect(r.edges.get('e2')!.tooFast).toBeUndefined()
+    // Flexible: one miner per node at 150%, still 90 each.
+    const flex = ironChain(miner90(false), 120, { plan: mk1 })
+    expect(flex.edges.get('e0')).toMatchObject({ perMin: 180, tooFast: { perMin: 90 } })
+    expect(flex.edges.get('e0')!.belts).toBeUndefined()
+    // Constructors at 250% with a Somersloop: 100 plates/min each.
+    const fast = ironChain(supplyNode('ore', ORE, 0, false), 200, { constructors: { clock: 2.5, sloops: 1 }, plan: mk1 })
+    expect(fast.edges.get('e2')!.tooFast!.perMin).toBeCloseTo(100)
+    // Half a constructor's worth is one machine at half speed: 50 fits a belt.
+    const half = ironChain(supplyNode('ore', ORE, 0, false), 50, { constructors: { clock: 2.5, sloops: 1 }, plan: mk1 })
+    expect(half.edges.get('e2')).toMatchObject({ belts: { count: 1 } })
+  })
+
+  it('checks the consuming machine too', () => {
+    const mk1 = { settings: { machineMode: 'fractional' as const, beltTier: 'base:Build_ConveyorBeltMk1_C' } }
+    // Smelters at 250% each take 75 ore/min through their one input.
+    const r = solvePlan(
+      plan([supplyNode('ore', ORE, 0, false), smelters({ clock: 2.5 }), constructors(), goalNode('goal', PLATE, 100)], chain, mk1),
+      catalog,
+    )
+    expect(r.edges.get('e0')!.tooFast).toMatchObject({ end: 'in', needs: 'base:Build_ConveyorBeltMk2_C' })
+    expect(r.edges.get('e0')!.tooFast!.perMin).toBeCloseTo(75)
+  })
+
+  it('says when no tier carries one machine', () => {
+    // Steel Screw at 250% with a Somersloop: 260 × 2.5 × 2 = 1300 screws/min, more than Mk.6 (1200).
+    const SCREW = 'Desc_IronScrew_C'
+    const r = solvePlan(
+      plan(
+        [
+          supplyNode('beam', 'Desc_SteelPlate_C', 0, false),
+          recipeNode('screw', 'Recipe_Alternate_Screw_2_C', 'Build_ConstructorMk1_C', { clock: 2.5, sloops: 1 }),
+          goalNode('goal', SCREW, 1300),
+        ],
+        [
+          ['beam', 'screw', 'Desc_SteelPlate_C'],
+          ['screw', 'goal', SCREW],
+        ],
+        { settings: { machineMode: 'fractional', beltTier: 'base:Build_ConveyorBeltMk6_C' } },
+      ),
+      catalog,
+    )
+    expect(r.edges.get('e1')).toEqual({ perMin: 1300, tooFast: { perMin: 1300, end: 'out' } })
+    expect(r.edges.get('e0')).toMatchObject({ belts: { count: 1 } })
+  })
+
+  it('flags the best site of a limited extractor group', () => {
+    const mk2 = { settings: { machineMode: 'fractional' as const, beltTier: 'base:Build_ConveyorBeltMk2_C' } }
+    const sites = [
+      { purity: 'base:impure', count: 2 },
+      { purity: 'base:pure', count: 1 },
+    ]
+    // Mk.1 miners at 100%: impure 30, pure 120 (fits Mk.2); at 150% the pure one makes 180.
+    const ok = ironChain(extractorNode('ore', 'Build_MinerMk1_C', ORE, sites, { limited: true }), 'max', { plan: mk2 })
+    expect(ok.edges.get('e0')!.tooFast).toBeUndefined()
+    const fast = ironChain(extractorNode('ore', 'Build_MinerMk1_C', ORE, sites, { limited: true, clock: 1.5 }), 'max', { plan: mk2 })
+    expect(fast.edges.get('e0')!.tooFast!.perMin).toBeCloseTo(180)
   })
 
   it('keeps unresolved nodes and ignores mismatched edges', () => {

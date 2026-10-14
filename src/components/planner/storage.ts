@@ -30,6 +30,8 @@ export interface Prefs {
   preferredRecipes: Record<string, string>
   /** ⚡ Build chain connects to nodes already making an item instead of adding new ones. */
   buildReuse: boolean
+  /** The recipe dropdown compares options at the node's rate rather than per machine. */
+  compareAtRate: boolean
 }
 
 function read<T>(key: string): T | null {
@@ -66,7 +68,7 @@ export function saveStore(store: PlanStore) {
 }
 
 export function loadPrefs(): Prefs {
-  return { lockedAlternates: [], edgeStyle: 'step', preferredRecipes: {}, buildReuse: true, ...read<Prefs>(PREFS_KEY) }
+  return { lockedAlternates: [], edgeStyle: 'step', preferredRecipes: {}, buildReuse: true, compareAtRate: true, ...read<Prefs>(PREFS_KEY) }
 }
 
 export function savePrefs(prefs: Prefs) {

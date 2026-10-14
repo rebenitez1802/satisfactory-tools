@@ -228,6 +228,7 @@ function Planner() {
     (id: string, patch: Partial<PlanNode>) => setPlan((p) => updateNode(p, id, patch, catalog), `node:${id}:${Object.keys(patch).join()}`),
     [setPlan, catalog],
   )
+  const compare = useMemo(() => ({ atRate: prefs.compareAtRate, setAtRate: (compareAtRate: boolean) => updatePrefs({ compareAtRate }) }), [prefs.compareAtRate, updatePrefs])
   const actions: InspectorActions = useMemo(
     () => ({
       update,
@@ -323,6 +324,7 @@ function Planner() {
             selection={liveSelection}
             actions={actions}
             isRecipeHidden={isRecipeHidden}
+            compare={compare}
           />
         </section>
       </div>
