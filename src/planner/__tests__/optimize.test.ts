@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { RecipeId } from '../../catalog'
-import { optimize, type OptimizeOptions } from '../optimize'
+import { optimize, resourceWeights, type OptimizeOptions } from '../optimize'
 import { solvePlan } from '../solve'
+import { defaultSites } from '../world'
 import type { Plan } from '../types'
 import { catalog, extractorNode, goalNode, plan, recipe, recipeNode, supplyNode } from './fixtures'
 
@@ -30,6 +31,13 @@ function run(p: Plan, opts: Partial<OptimizeOptions> = {}) {
 const achieved = (s: ReturnType<typeof solvePlan>, id: string) => s.goals.find((g) => g.id === id)!.achieved
 
 describe('optimize', () => {
+  it('weighs resources by scarcity, and water not at all', () => {
+    const w = resourceWeights(catalog, defaultSites(catalog))
+    expect(w('base:Desc_OreIron_C')).toBe(1)
+    expect(w('base:Desc_OreUranium_C')).toBeCloseTo(92100 / 2100)
+    expect(w('base:Desc_Water_C')).toBe(0)
+  })
+
   it('builds the standard chain when no alternates are unlocked', () => {
     const r = run(plan([goalNode('g', 'Desc_IronPlate_C', 120)]), { isRecipeHidden: unlocked() })
     expect(r.ok).toBe(true)
@@ -44,7 +52,7 @@ describe('optimize', () => {
   it('picks an unlocked alternate that saves resources', () => {
     // 180 ingots: Pure Iron Ingot makes 65/min from 35 ore and 20 water, so
     // 36/13 refineries, 1260/13 ore and 720/13 water. Weighted, that's
-    // 96.9 + 5.5 against 180 ore for smelting.
+    // 96.9 (water is free) against 180 ore for smelting.
     const r = run(plan([goalNode('g', 'Desc_IronPlate_C', 120)]), { isRecipeHidden: unlocked('Recipe_Alternate_PureIronIngot_C') })
     expect(r.groups.get('Pure Iron Ingot')).toBeCloseTo(36 / 13)
     expect(r.groups.has('Iron Ingot')).toBe(false)

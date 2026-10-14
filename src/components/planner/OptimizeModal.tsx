@@ -10,7 +10,7 @@ import { fmt, mw } from './format'
 import { Icon } from './Icon'
 
 const OBJECTIVES: [Objective, string, string][] = [
-  ['resources', 'Fewest raw resources', 'Each resource weighed by how scarce the map makes it: uranium counts far more than iron, water very little.'],
+  ['resources', 'Fewest raw resources', 'Each resource weighed by how scarce the map makes it: uranium counts far more than iron. Water is free.'],
   ['power', 'Least power', 'Power the machines draw at 100% clock.'],
   ['buildings', 'Fewest buildings', 'Machines and extractors, counted at 100% clock.'],
 ]

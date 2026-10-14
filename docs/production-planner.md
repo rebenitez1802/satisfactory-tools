@@ -357,8 +357,10 @@ byproducts (a recipe's second output, or all of a generator's outputs).
   - One objective, a preference: **fewest raw resources** (the default),
     **least power** or **fewest buildings**. Raw resources are weighed by
     how scarce the map makes them: the most common one (iron, 92100/min)
-    weighs 1, uranium (2100/min) 44, water from Water Extractors 0.1. Power
-    and buildings are counted at 100% clock. A second, tiny term breaks
+    weighs 1, uranium (2100/min) 44. Water is free: Water Extractors go on
+    any water, so they only cost power and buildings, which the other two
+    objectives count (and the tie-breaker below counts their buildings).
+    Power and buildings are counted at 100% clock. A second, tiny term breaks
     ties (buildings, or resources), so no pointless loops make it in.
   - It uses the standard recipes and the unlocked alternates, never locked
     ones. Raw resources are mined, never made: the Converter's ore recipes

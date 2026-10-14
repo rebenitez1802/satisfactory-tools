@@ -19,7 +19,9 @@
 //   (and Max generators) then get the same share of what each could reach
 //   alone: a first program per Max goal finds that, a second one the share.
 // - Objective: fewest raw resources (each weighed by how scarce the map
-//   makes it, iron = 1), least power (MW at 100% clock), or fewest buildings.
+//   makes it, iron = 1; water from Water Extractors is free, since only
+//   their power and buildings cost anything, and the other objectives count
+//   those), least power (MW at 100% clock), or fewest buildings.
 //   A small second term breaks ties (buildings, or resources), so no pointless
 //   loops (package, unpackage) make it in. Fractional machines are fine.
 //
@@ -70,8 +72,12 @@ export interface OptimizeResult {
 const EPS = 1e-6
 /** Weight of an item nothing makes and no extractor mines (leaves, mycelia…): only if there's no other way. */
 const IMPORT_WEIGHT = 1000
-/** Weight of resources with no limit (water from Water Extractors), against the most common ore. */
-const UNLIMITED_WEIGHT = 0.1
+/**
+ * Weight of resources with no limit (water from Water Extractors): none. It
+ * costs only its extractors' power and buildings, which the other
+ * objectives count, and the tie-breaker still counts its buildings.
+ */
+const UNLIMITED_WEIGHT = 0
 /** Weight of the second objective, which only breaks ties. */
 const TIE = 1e-3
 
@@ -98,8 +104,8 @@ interface Column {
 
 const NO_COST: Record<Objective, number> = { resources: 0, power: 0, buildings: 0 }
 
-/** Raw resources weighed by scarcity: the most common capped one is 1, unlimited ones a tenth of that. */
-function resourceWeights(catalog: Catalog, sites: WorldSite[]): (item: ItemId) => number {
+/** Raw resources weighed by scarcity: the most common capped one is 1, unlimited ones (water) 0. */
+export function resourceWeights(catalog: Catalog, sites: WorldSite[]): (item: ItemId) => number {
   const caps = new Map<ItemId, number | undefined>()
   for (const item of catalog.extractorsFor.keys()) caps.set(item, worldCapacity(catalog, sites, item))
   const ref = Math.max(0, ...[...caps.values()].map((c) => c ?? 0))
