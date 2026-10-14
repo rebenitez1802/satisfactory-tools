@@ -2,9 +2,10 @@
 // as switching recipe/alternate, machine, resource and purity nodes.
 
 import { useState, type ReactNode } from 'react'
-import type { Catalog } from '../../catalog'
+import type { Catalog, Machine } from '../../catalog'
 import {
   defaultPurity,
+  doneShortfall,
   maxClock,
   openInputs,
   minClock,
@@ -34,6 +35,8 @@ export interface InspectorActions {
   duplicate: (ids: string[]) => void
   /** ⚡ Build chain for every input of the node that has no belt. */
   buildChain: (id: string) => void
+  /** Build checklist: mark nodes done with the machines they need now, or clear the mark. */
+  markDone: (ids: string[], done: boolean) => void
 }
 
 interface InspectorProps {
@@ -83,9 +86,26 @@ export function Inspector({ plan, result, catalog, selection, actions, isRecipeH
     )
   }
   if (selection.nodes.length > 1) {
+    const picked = plan.nodes.filter((n) => selection.nodes.includes(n.id))
+    const done = picked.filter((n) => n.done && !doneShortfall(n, result.nodes.get(n.id))).length
     return (
       <aside className="pn-inspector">
         <h3>{selection.nodes.length} nodes selected</h3>
+        <Field label="Build checklist" hint={`${done} of ${picked.length} done.`}>
+          <div className="pn-insp-row">
+            <button type="button" className="pn-button pn-button-quiet pn-button-inline" disabled={done === picked.length} onClick={() => actions.markDone(selection.nodes, true)}>
+              ✓ Mark done
+            </button>
+            <button
+              type="button"
+              className="pn-button pn-button-quiet pn-button-inline"
+              disabled={picked.every((n) => !n.done)}
+              onClick={() => actions.markDone(selection.nodes, false)}
+            >
+              Not done
+            </button>
+          </div>
+        </Field>
         <div className="pn-insp-actions">
           <button type="button" className="pn-button pn-button-quiet" onClick={() => actions.duplicate(selection.nodes)}>
             Duplicate
@@ -173,6 +193,7 @@ function NodeInspector({
           </span>
         </div>
       )}
+      {res?.resolved && <DoneField node={node} res={res} actions={actions} />}
       {node.kind === 'recipe' && (
         <RecipeFields node={node} res={res} catalog={catalog} actions={actions} isRecipeHidden={isRecipeHidden} mode={mode} compare={compare} />
       )}
@@ -193,8 +214,8 @@ function NodeInspector({
               {fmt(res.setup.count)} × {catalog.machines.get((node as RecipeNode).machine)?.name ?? 'machines'} @ {pct(res.setup.clock)}
             </div>
           )}
-          {res.setup && node.kind === 'recipe' && (res.setup.shards > 0 || node.sloops > 0) && (
-            <UpgradeTotals node={node} shardsEach={res.setup.shards} count={res.setup.count} catalog={catalog} />
+          {(node.kind === 'recipe' || node.kind === 'extractor') && res.upgrades && (
+            <UpgradeTotals upgrades={res.upgrades} machine={catalog.machines.get(node.machine)} catalog={catalog} />
           )}
           {res.clock !== undefined && <div>Runs @ {pct(res.clock)}</div>}
           {res.generatedMw !== undefined ? (
@@ -224,6 +245,42 @@ function NodeInspector({
         </button>
       </div>
     </>
+  )
+}
+
+/** Build checklist: a done mark, and what to do when the plan outgrew it. */
+function DoneField({ node, res, actions }: { node: PlanNode; res: NodeResult; actions: InspectorActions }) {
+  const behind = doneShortfall(node, res)
+  const done = !!node.done && !behind
+  return (
+    <Field
+      label="Build checklist"
+      hint={
+        behind
+          ? undefined
+          : done
+            ? `Done${node.done!.count ? `, with ${node.done!.count} built` : ''}. Its cost is left out of "still needed".`
+            : 'Tick it once this node is built in the game.'
+      }
+    >
+      <label className="pn-toggle">
+        <input type="checkbox" checked={done} onChange={(e) => actions.markDone([node.id], e.target.checked)} />
+        <span className="pn-toggle-track" />
+        <span>{behind ? `All ${behind.needs} built` : 'Done'}</span>
+      </label>
+      {behind && (
+        <>
+          <span className="pn-insp-hint">
+            <span className="pn-warn">
+              Marked done with {behind.built}, but the plan now needs {behind.needs}: {behind.needs - behind.built} more to build.
+            </span>
+          </span>
+          <button type="button" className="pn-link" onClick={() => actions.markDone([node.id], false)}>
+            Clear the mark
+          </button>
+        </>
+      )}
+    </Field>
   )
 }
 
@@ -413,6 +470,7 @@ function ExtractorFields({ node, catalog, actions }: { node: ExtractorNode; cata
   const what = spec.anywhere ? 'extractor' : spec.poweredBy ? 'satellite node' : 'node'
   // A flexible group sizes its own count; only its purity is a choice.
   const autoCount = !node.limited
+  const shards = shardsNeeded(machine, node.clock)
 
   return (
     <>
@@ -481,11 +539,14 @@ function ExtractorFields({ node, catalog, actions }: { node: ExtractorNode; cata
       <Field
         label="Clock speed"
         hint={
-          node.limited
-            ? `What these ${what}s give at this clock is the limit.`
-            : autoCount
-              ? `Preferred clock: the ${what} count adapts to it.`
-              : undefined
+          <>
+            {node.limited ? `What these ${what}s give at this clock is the limit.` : `Preferred clock: the ${what} count adapts to it.`}
+            {shards > 0 && (
+              <span className="pn-insp-row">
+                Needs <UpgradeChip item={upgradeItems(machine, catalog).shard} count={shards} fallback="◆" title="per extractor" size={16} /> per extractor
+              </span>
+            )}
+          </>
         }
       >
         <ClockField value={node.clock} min={minClock(machine)} max={maxClock(machine)} onChange={(clock) => actions.update(node.id, { clock })} />
@@ -503,16 +564,16 @@ function ExtractorFields({ node, catalog, actions }: { node: ExtractorNode; cata
   )
 }
 
-/** Total power shards and Somersloops a recipe group needs, with their icons. */
-function UpgradeTotals({ node, shardsEach, count, catalog }: { node: RecipeNode; shardsEach: number; count: number; catalog: Catalog }) {
-  const machine = catalog.machines.get(node.machine)
+/** Total power shards and Somersloops a machine or extractor group needs, with their icons. */
+function UpgradeTotals({ upgrades, machine, catalog }: { upgrades: NonNullable<NodeResult['upgrades']>; machine?: Machine; catalog: Catalog }) {
   const { shard, sloop } = upgradeItems(machine, catalog)
-  const built = Math.ceil(count - 1e-6)
-  const sloops = Math.min(node.sloops, sloopSlots(machine!)) * built
+  const shards = upgrades.shardsEach * upgrades.built
+  const sloops = upgrades.sloopsEach * upgrades.built
+  if (!shards && !sloops) return null
   return (
     <div className="pn-insp-row">
       Needs
-      {shardsEach > 0 && <UpgradeChip item={shard} count={shardsEach * built} fallback="◆" title={`${shard?.name ?? 'Power shards'} in total`} size={18} />}
+      {shards > 0 && <UpgradeChip item={shard} count={shards} fallback="◆" title={`${shard?.name ?? 'Power shards'} in total`} size={18} />}
       {sloops > 0 && <UpgradeChip item={sloop} count={sloops} fallback="◉" title={`${sloop?.name ?? 'Somersloops'} in total`} size={18} />}
       in total
     </div>

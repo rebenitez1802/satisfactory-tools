@@ -77,6 +77,7 @@ function qualifyEntity<K extends EntityKind>(
     const m = entity as Partial<Machine>
     if (m.overclock?.item) out.overclock = { ...m.overclock, item: qualify(m.overclock.item, packId) }
     if (m.amplifier?.item) out.amplifier = { ...m.amplifier, item: qualify(m.amplifier.item, packId) }
+    if (m.buildCost) out.buildCost = m.buildCost.map((a) => ({ ...a, item: qualify(a.item, packId) }))
     if (m.extraction) {
       out.extraction = {
         ...m.extraction,
@@ -227,6 +228,11 @@ function validateReferences(store: Store, diagnostics: Diagnostic[]) {
         store.machines.set(id, { ...store.machines.get(id)!, [key]: { ...spec, item: undefined } })
       }
     }
+    if (m.buildCost?.some((a) => !store.items.has(a.item))) {
+      // A cost missing some of its items would look cheaper than it is.
+      diagnostics.push({ severity: 'warning', pack: packOf(id), id, message: `Machine "${id}" has a build cost with unknown items; its cost is unknown.` })
+      store.machines.set(id, { ...store.machines.get(id)!, buildCost: undefined })
+    }
     if (!m.extraction) continue
     const resources = m.extraction.resources.filter((r) => store.items.has(r))
     if (resources.length !== m.extraction.resources.length) {
@@ -237,7 +243,7 @@ function validateReferences(store: Store, diagnostics: Diagnostic[]) {
       diagnostics.push({ severity: 'warning', pack: packOf(id), id, message: `Extractor "${id}" is powered by unknown machine "${poweredBy}".` })
       poweredBy = undefined
     }
-    store.machines.set(id, { ...m, extraction: { ...m.extraction, resources, poweredBy } })
+    store.machines.set(id, { ...store.machines.get(id)!, extraction: { ...m.extraction, resources, poweredBy } })
   }
 
   for (const [id, r] of store.recipes) {

@@ -1,4 +1,5 @@
 import type { Catalog, ItemId } from '../../catalog'
+import { buildCost } from '../../planner'
 import type { ItemRate, MachineMode, Plan, PlanSettings, SolveResult } from '../../planner'
 import { fmt, mw, pct, tierName } from './format'
 import { Icon } from './Icon'
@@ -164,6 +165,8 @@ export function PlanSummary({
         </div>
       )}
 
+      <BuildSections plan={plan} result={result} catalog={catalog} />
+
       <Section title="Settings">
         <div className="field">
           <span>Machine counts</span>
@@ -242,6 +245,63 @@ export function PlanSummary({
           </button>
         </div>
       </Section>
+    </>
+  )
+}
+
+/**
+ * Build checklist progress, and what the buildings cost: the total, and once
+ * nodes are marked done, what's still needed.
+ */
+function BuildSections({ plan, result, catalog }: { plan: Plan; result: SolveResult; catalog: Catalog }) {
+  if (!plan.nodes.length) return null
+  const cost = buildCost(plan, result, catalog)
+  const tracking = plan.nodes.some((n) => n.done)
+  const left = cost.needed.filter((a) => a.amount > 0).length
+  return (
+    <>
+      <Section title="Build checklist">
+        <div className="pn-progress" title={`${cost.done} of ${cost.nodes} nodes marked done`}>
+          <div style={{ width: `${(100 * cost.done) / cost.nodes}%` }} />
+        </div>
+        <div className="pn-row">
+          <span className="pn-row-label">
+            {cost.done} of {cost.nodes} nodes done
+          </span>
+          {!tracking && <span className="pn-dim pn-row-hint">Tick ✓ on a card once it's built</span>}
+        </div>
+        {cost.behind > 0 && (
+          <div className="pn-note pn-warn">
+            {cost.behind === 1 ? '1 node needs' : `${cost.behind} nodes need`} more machines than when marked done
+          </div>
+        )}
+      </Section>
+      {(cost.total.length > 0 || cost.unknown.length > 0) && (
+        <Section title="Build cost" action={tracking && <span className="pn-section-legend">still needed / total</span>}>
+          {cost.total.map((a, i) => {
+            const item = catalog.items.get(a.item)
+            const needed = cost.needed[i].amount
+            return (
+              <Row key={a.item} icon={item && <Icon of={item} size={20} />} label={item?.name ?? a.item}>
+                {tracking ? (
+                  <>
+                    <span className={needed > 0 ? '' : 'pn-good'}>{fmt(needed)}</span>
+                    <span className="pn-dim"> / {fmt(a.amount)}</span>
+                  </>
+                ) : (
+                  fmt(a.amount)
+                )}
+              </Row>
+            )
+          })}
+          {tracking && cost.total.length > 0 && left === 0 && <div className="pn-note pn-good">Everything is built.</div>}
+          {cost.unknown.length > 0 && (
+            <div className="pn-note pn-dim">
+              Cost unknown for {cost.unknown.map((id) => catalog.machines.get(id)?.name ?? id).join(', ')}.
+            </div>
+          )}
+        </Section>
+      )}
     </>
   )
 }

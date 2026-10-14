@@ -35,8 +35,8 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | 16 | [Byproduct loops](#16-byproduct-loops) | M3 | High | M–L | Later, needs design |
 | 18 | [How to belt or pipe a connection](#18-how-to-belt-or-pipe-a-connection) | M3 | Low | S–M | Later, after #4 |
 | 19 | [Balancer with several inputs](#19-balancer-with-several-inputs) | M2 | Med–High | M | Planned, after #4 |
-| 20 | [Build cost](#20-build-cost) | M2 | Med–High | S–M | Planned |
-| 21 | [Build checklist](#21-build-checklist) | M2 | High | S | Planned |
+| 20 | [Build cost](#20-build-cost) | M2 | Med–High | S–M | Done (PR #12) |
+| 21 | [Build checklist](#21-build-checklist) | M2 | High | S | Done (PR #12) |
 | — | [Mods and data tooling](#deferred-mods-and-data-tooling) | — | — | — | Deferred |
 
 When an item ships, change its status to **Done (PR #n)** and move its rules
@@ -55,7 +55,7 @@ and useful straight away while playing. Reorder freely.
 |---|---|---|---|
 | 1 | Build chain | #2 | Done (PR #9). #6 and #17 reuse its node-building helpers. |
 | 2 | Refine and read | #3, #4, #13 | Done (PR #11). Closes M1. |
-| 3 | Build in game | #21, #20 | Small and independent of the solver, and it helps right away while playing. Together the summary can show what's left to build and what it costs. |
+| 3 | Build in game | #21, #20 | Done (PR #12). |
 | 4 | Solver core | #6 (LP core), #16 | An LP solves byproduct loops exactly; isolated because it changes rates. |
 | 5 | Optimize | #6 (UI), #11 | The Optimize action; world node counts weigh "fewest raw resources". |
 | 6 | Real belts | #19, #18 | Both turn one logical flow into belts you can build, and share a helper that puts machines onto belts. Builds on #4's belt counts. |
@@ -467,6 +467,12 @@ since it reuses both.
 
 ### 20. Build cost
 
+**Done.** Its behaviour is in
+[production-planner.md](production-planner.md#interaction) ("Build cost").
+`Machine.buildCost` comes from greeny's build-gun recipes; every vanilla
+machine has one. Costs are counted whole per node, from the new
+`NodeResult.buildings`. Not done: belts, pipes, splitters and mergers.
+
 **Value:** "what do I need to bring to build this?" The summary already
 counts buildings; this adds the materials they cost. Asked for by the user
 on 2026-10-14. **Effort:** S–M.
@@ -500,6 +506,14 @@ on 2026-10-14. **Effort:** S–M.
   Nuclear Power Plant), and unit tests for `buildCost`.
 
 ### 21. Build checklist
+
+**Done.** Its behaviour is in
+[production-planner.md](production-planner.md#interaction) ("Build
+checklist"). Changed while building, at the user's request: a node whose
+plan now needs more machines than it was marked done with **isn't done**
+any more. It is highlighted, left out of the progress count, and only its
+extra machines count toward "still needed". The "show what's left" view
+wasn't built; done cards fade instead.
 
 **Value:** keeps track of a plan while building it in the game, often
 across several sessions. Asked for by the user on 2026-10-14. **Effort:** S.

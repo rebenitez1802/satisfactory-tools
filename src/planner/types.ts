@@ -27,6 +27,12 @@ interface PlanNodeBase {
   id: string
   position: { x: number; y: number }
   label?: string
+  /**
+   * Build checklist: the player marked the node built in the game. `count` is
+   * how many of its machines it had then, so the plan can flag a node that
+   * needs more since. The solver ignores it.
+   */
+  done?: { count: number }
 }
 
 /** A group of identical machines running one recipe. */

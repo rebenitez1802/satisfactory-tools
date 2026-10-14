@@ -9,6 +9,8 @@ export interface PlannerContextValue {
   result: SolveResult
   settings: PlanSettings
   updateNode: (id: string, patch: Partial<PlanNode>) => void
+  /** Build checklist: mark nodes done with the machines they need now, or clear the mark. */
+  markDone: (ids: string[], done: boolean) => void
   openSplit: (nodeId: string, item: ItemId) => void
   /** Locked alternates are left out of pickers. */
   isRecipeHidden: (id: string) => boolean

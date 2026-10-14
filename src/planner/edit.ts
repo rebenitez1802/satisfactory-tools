@@ -34,10 +34,39 @@ export function pruneEdges(plan: Plan, catalog: Catalog): Plan {
   return edges.length === plan.edges.length ? plan : { ...plan, edges }
 }
 
-/** Patch a node, then drop belts its new ports can't carry. */
+/** Fields that say what a node is. Changing one makes it something not built yet. */
+const IDENTITY = ['recipe', 'machine', 'resource', 'item'] as const
+
+/**
+ * Patch a node, then drop belts its new ports can't carry. A new recipe,
+ * machine, resource or item also clears its done mark.
+ */
 export function updateNode(plan: Plan, id: string, patch: Partial<PlanNode>, catalog: Catalog): Plan {
-  const nodes = plan.nodes.map((n) => (n.id === id ? ({ ...n, ...patch } as PlanNode) : n))
+  const nodes = plan.nodes.map((n) => {
+    if (n.id !== id) return n
+    const next = { ...n, ...patch } as PlanNode
+    const rec = n as unknown as Record<string, unknown>
+    const changed = IDENTITY.some((k) => k in patch && (patch as Record<string, unknown>)[k] !== rec[k])
+    if (changed && !('done' in patch)) delete next.done
+    return next
+  })
   return pruneEdges({ ...plan, nodes }, catalog)
+}
+
+/**
+ * Mark nodes done in the build checklist, remembering how many machines each
+ * had (`built`), or clear the mark when `built` is false.
+ */
+export function markDone(plan: Plan, ids: Iterable<string>, built: ((id: string) => number) | false): Plan {
+  const pick = new Set(ids)
+  const nodes = plan.nodes.map((n): PlanNode => {
+    if (!pick.has(n.id)) return n
+    if (built) return { ...n, done: { count: built(n.id) } }
+    if (!n.done) return n
+    const { done: _, ...rest } = n
+    return rest as PlanNode
+  })
+  return { ...plan, nodes }
 }
 
 /**
@@ -126,7 +155,8 @@ export function pasteClip(
 ): { plan: Plan; ids: string[] } {
   if (!clip.nodes.length) return { plan, ids: [] }
   const ids = new Map(clip.nodes.map((n) => [n.id, newId()]))
-  const nodes = clip.nodes.map((n) => ({
+  // Copies are new machines: none of them is built yet.
+  const nodes = clip.nodes.map(({ done: _, ...n }): PlanNode => ({
     ...n,
     id: ids.get(n.id)!,
     position: { x: n.position.x + offset.x, y: n.position.y + offset.y },

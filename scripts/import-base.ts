@@ -1,7 +1,7 @@
 // Build the `base` data pack (public/packs/base/pack.json) from greeny's
 // dataset plus the hand-written overlay. Keeps machine-run recipes only:
-// build-gun recipes, equipment, and FICSMAS (a separate file upstream) are
-// left out. Fluid amounts are already in m³. Generators become machines with
+// equipment and FICSMAS (a separate file upstream) are left out, and the
+// build-gun recipes of the machines we keep become their `buildCost`. Fluid amounts are already in m³. Generators become machines with
 // one recipe per fuel, so the planner sizes fuel chains like any other.
 //
 //   node scripts/import-base.ts      (then scripts/fetch-icons.ts adds icons)
@@ -36,6 +36,13 @@ const byId = <T extends { id: string }>(a: T, b: T) => a.id.localeCompare(b.id)
 
 const data = await loadGreeny()
 
+// What each building costs: the build-gun recipe whose product is its descriptor.
+const buildCosts = new Map(
+  Object.values(data.recipes)
+    .filter((r) => r.forBuilding && r.products.length === 1)
+    .map((r) => [toBuild(r.products[0].item), r.ingredients.map((a) => ({ item: a.item, amount: a.amount }))]),
+)
+
 // Recipes run by a machine.
 const recipes: Recipe[] = Object.values(data.recipes)
   .filter((r) => r.inMachine && !r.forBuilding)
@@ -69,6 +76,7 @@ const baseMachine = (buildClass: string, category: string): Machine => {
     speed: 1,
     ports: { belt: { in: 0, out: 0 }, pipe: { in: 0, out: 0 } },
     overclock: OVERCLOCK,
+    ...(buildCosts.has(buildClass) ? { buildCost: buildCosts.get(buildClass) } : {}),
   }
 }
 
@@ -143,11 +151,12 @@ for (const [id, extra] of Object.entries(GENERATORS)) {
 }
 recipes.sort(byId)
 machines.sort(byId)
+for (const m of machines) if (!m.buildCost) console.warn(`No build cost for ${m.id}`)
 
 // Items referenced by recipes or extractable.
 const usedItems = new Set([
   ...recipes.flatMap((r) => [...r.inputs, ...r.outputs].map((a) => a.item)),
-  ...machines.flatMap((m) => m.extraction?.resources ?? []),
+  ...machines.flatMap((m) => [...(m.extraction?.resources ?? []), ...(m.buildCost ?? []).map((a) => a.item)]),
   ...UPGRADE_ITEMS,
 ])
 const items: Item[] = [...usedItems]

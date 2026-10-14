@@ -1174,3 +1174,80 @@
   line-height: 18px;
   cursor: pointer;
 }
+
+/* Build checklist: a ✓ in the card's top-left corner. Hidden until hover on
+   cards not marked; done cards fade so what's left stands out. */
+.pn-check {
+  position: absolute;
+  top: -9px;
+  left: 6px;
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel-2);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 15px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.pn-card:hover .pn-check,
+.pn-card.selected .pn-check,
+.pn-check:focus-visible,
+.pn-check.pn-check-done,
+.pn-check.pn-check-behind {
+  opacity: 1;
+}
+.pn-check:hover {
+  border-color: var(--green);
+  color: var(--green);
+}
+.pn-check.pn-check-done {
+  background: var(--green);
+  border-color: var(--green);
+  color: #052e16;
+}
+.pn-check.pn-check-behind {
+  background: rgba(252, 211, 77, 0.18);
+  border-color: #fcd34d;
+  color: #fcd34d;
+}
+.pn-card.pn-done > :not(.pn-check) {
+  opacity: 0.45;
+}
+.pn-card.pn-done {
+  border-color: rgba(34, 197, 94, 0.45);
+  box-shadow: none;
+}
+.pn-card.pn-done.selected {
+  border-color: var(--accent);
+}
+.pn-card.pn-behind {
+  border-color: #fcd34d;
+  box-shadow: 0 0 0 2px rgba(252, 211, 77, 0.25), 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+.pn-progress {
+  height: 6px;
+  margin: 2px 0 4px;
+  border-radius: 3px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.pn-progress > div {
+  height: 100%;
+  background: var(--green);
+  transition: width 0.2s;
+}
+.pn-row-hint {
+  font-size: 11px;
+}
+.pn-section-legend {
+  font-size: 10px;
+  letter-spacing: normal;
+  text-transform: none;
+}

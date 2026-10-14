@@ -23,6 +23,9 @@ scripts/                           build-time importers (not shipped)
      for generators. `extraction.anywhere` marks extractors that aren't tied
      to resource nodes (the Water Extractor goes on any water), so any number
      can be built and the UI counts extractors rather than nodes.
+     `buildCost` lists the items one of the machine costs to build; absent
+     means unknown, not free. A cost naming an item that isn't loaded is
+     dropped with a diagnostic.
    - Generators run recipes like any machine: one per fuel. A cycle burns one
      unit of fuel (1 item, or 1 m³ of a fluid fuel) for `energyMJ / MW`
      seconds; water and waste are per cycle. Generator recipes may have no
@@ -88,6 +91,8 @@ npm run data:base   # scripts/import-base.ts + scripts/fetch-icons.ts
 - Recipe data comes from greeny/SatisfactoryTools `data/data1.0.json` (MIT),
   pinned to a commit in `scripts/greeny.ts`. Its machine recipes match the
   game's 1.2 data.
+- Build costs are greeny's build-gun recipes (`forBuilding`), matched to
+  each machine by its class name.
 - Values greeny lacks are hand-written in `scripts/base-overlay.ts`: ports,
   Somersloop slots, purities, belt and pipe tiers, the Water Extractor,
   resource wells, gas forms, generator ports, and the waste each nuclear fuel

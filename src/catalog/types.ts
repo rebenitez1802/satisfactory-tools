@@ -142,6 +142,8 @@ export interface Machine {
   extraction?: ExtractionSpec
   /** Present on power generators. */
   generation?: GenerationSpec
+  /** What one of these costs to build. Absent: unknown (not free). */
+  buildCost?: ItemAmount[]
 }
 
 export interface ItemAmount {

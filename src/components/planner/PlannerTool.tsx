@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import type { Catalog, ItemId } from '../../catalog'
-import { duplicateNodes, newNodeId, openInputs, removeNodes, setRecipe, solvePlan, updateNode, validatePlan } from '../../planner'
+import { builtCount, duplicateNodes, markDone, newNodeId, openInputs, removeNodes, setRecipe, solvePlan, updateNode, validatePlan } from '../../planner'
 import type { Plan, PlanEdge, PlanNode, PlanSettings } from '../../planner'
 import { AlternatesModal } from './AlternatesModal'
 import { BalancerPopup } from './BalancerPopup'
@@ -228,6 +228,11 @@ function Planner() {
     (id: string, patch: Partial<PlanNode>) => setPlan((p) => updateNode(p, id, patch, catalog), `node:${id}:${Object.keys(patch).join()}`),
     [setPlan, catalog],
   )
+  // The count comes from the rates on screen, so a mark records what the player saw.
+  const mark = useCallback(
+    (ids: string[], done: boolean) => setPlan((p) => markDone(p, ids, done && ((id) => builtCount(result.nodes.get(id))))),
+    [setPlan, result],
+  )
   const compare = useMemo(() => ({ atRate: prefs.compareAtRate, setAtRate: (compareAtRate: boolean) => updatePrefs({ compareAtRate }) }), [prefs.compareAtRate, updatePrefs])
   const actions: InspectorActions = useMemo(
     () => ({
@@ -244,9 +249,10 @@ function Planner() {
       removeNodes: (ids) => setPlan((p) => removeNodes(p, ids)),
       removeEdges: (ids) => setPlan((p) => ({ ...p, edges: p.edges.filter((e) => !ids.includes(e.id)) })),
       duplicate: (ids) => setPlan((p) => duplicateNodes(p, ids, newNodeId)),
+      markDone: mark,
       buildChain: (id) => canvas.current?.buildChain(openInputs(planRef.current, catalog, { node: id })),
     }),
-    [update, setPlan, catalog, rememberRecipe],
+    [update, setPlan, catalog, rememberRecipe, mark],
   )
   const updateSettings = useCallback(
     (patch: Partial<PlanSettings>) => setPlan((p) => ({ ...p, settings: { ...p.settings, ...patch } })),
@@ -259,13 +265,14 @@ function Planner() {
       result,
       settings: plan.settings,
       updateNode: update,
+      markDone: mark,
       openSplit: (nodeId, item) => setOpenSplit({ nodeId, item }),
       isRecipeHidden,
       edgeStyle: prefs.edgeStyle,
       build,
       rememberRecipe,
     }),
-    [catalog, result, plan.settings, update, isRecipeHidden, prefs.edgeStyle, build, rememberRecipe],
+    [catalog, result, plan.settings, update, mark, isRecipeHidden, prefs.edgeStyle, build, rememberRecipe],
   )
   const split = openSplit && result.splits.find((s) => s.node === openSplit.nodeId && s.item === openSplit.item)
   const alternateCount = [...catalog.recipes.values()].filter((r) => r.alternate).length

@@ -40,7 +40,8 @@ Generators (coal, fuel, biomass, nuclear) are recipe nodes with a 🎯 MW
 target or Max; the summary shows power used, made and net. Spare byproducts
 (nuclear waste, heavy oil residue, …) flow on into the chains they feed. ⚡ Build
 chain fills a goal or missing input back to raw resources. Splits
-open a read-only load balancer. Plans live in tabs and autosave to
+open a read-only load balancer. A build checklist (✓ on each card) and the
+build cost help while building the plan in the game. Plans live in tabs and autosave to
 localStorage. Game data comes from **mod-ready data packs** (see "Production
 chains" below).
 
@@ -127,7 +128,8 @@ src/
   catalog/                  Game data, framework-free: types, pack format, buildCatalog merge, icon helpers
   planner/                  Planner logic, framework-free: plan types, rates/power, solve.ts
                             (targets & limits, byproduct stages), create/edit/place helpers,
-                            layout.ts (Tidy, dagre), autobuild.ts (⚡ Build chain)
+                            layout.ts (Tidy, dagre), autobuild.ts (⚡ Build chain),
+                            buildcost.ts (build checklist, build cost)
   components/planner/       Planner UI: PlannerTool (state, tabs, history), PlanCanvas (React Flow),
                             nodes.tsx (cards), Inspector, Picker, RecipeSelect, BalancerPopup, planner.css
   components/
@@ -216,7 +218,7 @@ PlannerTool  (plan tabs, useHistory undo stack, prefs)
 solvePlan(plan, catalog) → SolveResult      (pure, memoized; src/planner/solve.ts)
    │
    ▼
-PlannerContext { catalog, result, updateNode, openSplit, isRecipeHidden, edgeStyle }
+PlannerContext { catalog, result, updateNode, markDone, openSplit, isRecipeHidden, edgeStyle }
    ├─ PlanCanvas   React Flow; its node list only mirrors the plan (drag,
    │               selection, measured size); positions are written back on drag stop
    │    ├─ nodes.tsx   cards (read result.nodes.get(id))
