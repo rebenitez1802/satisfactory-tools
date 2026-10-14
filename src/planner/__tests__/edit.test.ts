@@ -91,6 +91,14 @@ describe('plan edits', () => {
     expect(ids).toContain('base:Recipe_IngotIron_C')
   })
 
+  it('lists the other fuels for a generator', () => {
+    expect(sameProductRecipes(catalog, 'base:Recipe_GeneratorNuclear_NuclearFuelRod_C').sort()).toEqual([
+      'base:Recipe_GeneratorNuclear_FicsoniumFuelRod_C',
+      'base:Recipe_GeneratorNuclear_NuclearFuelRod_C',
+      'base:Recipe_GeneratorNuclear_PlutoniumFuelRod_C',
+    ])
+  })
+
   it('validates plan files', () => {
     expect(validatePlan(chain())).toBeUndefined()
     expect(validatePlan(null)).toBe('Not a plan file.')

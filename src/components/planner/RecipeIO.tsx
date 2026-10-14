@@ -4,7 +4,8 @@ import { Icon } from './Icon'
 
 /**
  * A recipe's ingredients → products as small icons with per-minute amounts
- * for one machine at 100%, so recipes can be compared at a glance.
+ * for one machine at 100%, so recipes can be compared at a glance. Generators
+ * also show the power they make.
  */
 export function RecipeIO({ recipe, catalog, size = 18, showMachine = true }: { recipe: Recipe; catalog: Catalog; size?: number; showMachine?: boolean }) {
   const machine = catalog.machines.get(recipe.machines[0])
@@ -27,6 +28,11 @@ export function RecipeIO({ recipe, catalog, size = 18, showMachine = true }: { r
       {recipe.inputs.length ? chips(recipe.inputs) : <span className="pn-dim">—</span>}
       <span className="pn-io-arrow">→</span>
       {chips(recipe.outputs)}
+      {machine?.generation && (
+        <span className="pn-io-chip pn-io-power" title={`${fmt(machine.generation.powerMw)} MW per ${machine.name} at 100%`}>
+          ⚡{fmt(machine.generation.powerMw)} MW
+        </span>
+      )}
       {showMachine && machine && (
         <span className="pn-io-machine" title={`per ${machine.name} at 100%`}>
           <Icon of={machine} size={size} />

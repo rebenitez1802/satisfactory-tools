@@ -301,3 +301,230 @@ describe('solver', () => {
     expect(machine('Build_SmelterMk1_C')).toBeDefined()
   })
 })
+
+const REFINERY = 'Build_OilRefinery_C'
+const NUCLEAR = 'Build_GeneratorNuclear_C'
+const reactor = (id: string, fuel: string, o: object = {}) => recipeNode(id, `Recipe_GeneratorNuclear_${fuel}_C`, NUCLEAR, o)
+
+describe('generators', () => {
+  const coal = (power: number | 'max' | undefined, o: object = {}) =>
+    recipeNode('gen', 'Recipe_GeneratorCoal_Coal_C', 'Build_GeneratorCoal_C', { power, ...o })
+  const coalPlan = (gen: PlanNode, coalPerMin?: number) =>
+    plan(
+      [supplyNode('coal', 'Desc_Coal_C', coalPerMin ?? 0, coalPerMin !== undefined), supplyNode('water', 'Desc_Water_C', 0, false), gen],
+      [
+        ['coal', 'gen', 'Desc_Coal_C'],
+        ['water', 'gen', 'Desc_Water_C'],
+      ],
+    )
+
+  it('a power target sizes the generators and their fuel', () => {
+    const r = solvePlan(coalPlan(coal(300)), catalog)
+    // 75 MW each, burning 15 coal and 45 m³ water a minute.
+    expect(r.nodes.get('gen')!.setup!.count).toBeCloseTo(4)
+    expect(r.nodes.get('coal')!.activity).toBeCloseTo(60)
+    expect(r.nodes.get('water')!.activity).toBeCloseTo(180)
+    expect(r.nodes.get('gen')!.generatedMw).toBeCloseTo(300)
+    expect(r.nodes.get('gen')!.powerMw).toBe(0)
+    expect(r.goals).toEqual([{ id: 'gen', item: 'base:Desc_Coal_C', requested: 300, achieved: expect.closeTo(300), power: true }])
+    expect(r.totals.generatedMw).toBeCloseTo(300)
+  })
+
+  it('overclocked generators scale linearly', () => {
+    const r = solvePlan(coalPlan(coal(300, { clock: 2 })), catalog)
+    expect(r.nodes.get('gen')!.setup).toMatchObject({ count: 2, clock: 2, shards: 2 })
+    expect(r.nodes.get('coal')!.activity).toBeCloseTo(60)
+    expect(r.totals.generatedMw).toBeCloseTo(300)
+  })
+
+  it('Max burns all the fuel a limit allows', () => {
+    const r = solvePlan(coalPlan(coal('max'), 45), catalog)
+    expect(r.goals[0].achieved).toBeCloseTo(225)
+    expect(r.nodes.get('coal')!.bottleneck).toBe(true)
+  })
+
+  it('a target the fuel cannot cover falls short', () => {
+    const r = solvePlan(coalPlan(coal(300), 30), catalog)
+    expect(r.goals[0].achieved).toBeCloseTo(150)
+    expect(r.nodes.get('coal')!.bottleneck).toBe(true)
+  })
+
+  it('reports power drawn and made', () => {
+    // 4 Water Extractors (20 MW each at 100%) feed 2 Nuclear Power Plants.
+    const pumps = extractorNode('water', 'Build_WaterPump_C', 'Desc_Water_C', [{ purity: 'base:normal', count: 4 }])
+    const r = solvePlan(
+      plan(
+        [supplyNode('rods', 'Desc_NuclearFuelRod_C', 0, false), pumps, reactor('npp', 'NuclearFuelRod', { power: 5000 })],
+        [
+          ['rods', 'npp', 'Desc_NuclearFuelRod_C'],
+          ['water', 'npp', 'Desc_Water_C'],
+        ],
+      ),
+      catalog,
+    )
+    expect(r.nodes.get('water')!.activity).toBeCloseTo(480)
+    expect(r.totals.powerMw).toBeCloseTo(80)
+    expect(r.totals.generatedMw).toBeCloseTo(5000)
+  })
+
+  it('flags radioactive waste with nowhere to go', () => {
+    const r = solvePlan(plan([reactor('npp', 'NuclearFuelRod', { power: 2500 })]), catalog)
+    expect(r.totals.surplus).toEqual([{ item: 'base:Desc_NuclearWaste_C', perMin: expect.closeTo(10) }])
+    expect(r.diagnostics).toEqual([
+      expect.objectContaining({ severity: 'warning', nodeId: 'npp', message: expect.stringContaining("10 Uranium Waste/min is left over and can't be sunk") }),
+    ])
+  })
+
+  it('a flexible generator is sized by demand for its waste', () => {
+    // Two plutonium plants burn 0.2 rods/min; the waste chain pulls 40 uranium waste, i.e. 4 uranium plants.
+    const r = solvePlan(plan(...wasteChain(reactor('u', 'NuclearFuelRod'), reactor('pu', 'PlutoniumFuelRod', { power: 5000 }))), catalog)
+    expect(r.nodes.get('u')!.activity).toBeCloseTo(4)
+    expect(r.nodes.get('u')!.generatedMw).toBeCloseTo(10000)
+  })
+
+  it('plans a whole nuclear chain: 4 uranium : 2 plutonium : 1 Ficsonium plants', () => {
+    const [nodes, edges] = wasteChain(reactor('u', 'NuclearFuelRod', { power: 10000 }), reactor('pu', 'PlutoniumFuelRod', { power: 'max' }))
+    const r = solvePlan(
+      plan(
+        [
+          ...nodes,
+          recipeNode('fx', 'Recipe_Ficsonium_C', 'Build_HadronCollider_C'),
+          recipeNode('frod', 'Recipe_FicsoniumFuelRod_C', 'Build_QuantumEncoder_C'),
+          recipeNode('dm', 'Recipe_DarkEnergy_C', 'Build_Converter_C'),
+          reactor('f', 'FicsoniumFuelRod', { power: 'max' }),
+        ],
+        [
+          ...edges,
+          ['pu', 'fx', 'Desc_PlutoniumWaste_C'],
+          ['fx', 'frod', 'Desc_Ficsonium_C'],
+          ['frod', 'fx', 'Desc_DarkEnergy_C'],
+          ['dm', 'fx', 'Desc_DarkEnergy_C'],
+          ['frod', 'f', 'Desc_FicsoniumFuelRod_C'],
+        ],
+      ),
+      catalog,
+    )
+    expect(r.goals.map((g) => [g.id, g.achieved])).toEqual([
+      ['u', expect.closeTo(10000)],
+      ['pu', expect.closeTo(5000)],
+      ['f', expect.closeTo(2500)],
+    ])
+    expect(r.totals.generatedMw).toBeCloseTo(17500)
+    // All the waste is used: only the Blender's water is left over, and no warnings.
+    expect(r.totals.surplus.map((s) => s.item)).toEqual(['base:Desc_Water_C'])
+    expect(r.diagnostics).toEqual([])
+    expect(r.nodes.get('u')!.outputs[0]).toMatchObject({ produced: expect.closeTo(40), used: expect.closeTo(40) })
+    expect(r.splits[0].edges.map((e) => e.perMin)).toEqual([expect.closeTo(30), expect.closeTo(10)])
+  })
+})
+
+/** Uranium waste → Non-Fissile Uranium + Plutonium Pellets → cells → Plutonium Fuel Rods → `pu`. */
+function wasteChain(u: PlanNode, pu: PlanNode): [PlanNode[], [string, string, string][]] {
+  const WASTE = 'Desc_NuclearWaste_C'
+  return [
+    [
+      supplyNode('rods', 'Desc_NuclearFuelRod_C', 0, false),
+      u,
+      recipeNode('nfu', 'Recipe_NonFissileUranium_C', 'Build_Blender_C'),
+      recipeNode('pellet', 'Recipe_Plutonium_C', 'Build_HadronCollider_C'),
+      recipeNode('cell', 'Recipe_PlutoniumCell_C', 'Build_AssemblerMk1_C'),
+      recipeNode('purod', 'Recipe_PlutoniumFuelRod_C', 'Build_ManufacturerMk1_C'),
+      pu,
+    ],
+    [
+      ['rods', 'u', 'Desc_NuclearFuelRod_C'],
+      ['u', 'nfu', WASTE],
+      ['u', 'pellet', WASTE],
+      ['nfu', 'pellet', 'Desc_NonFissibleUranium_C'],
+      ['pellet', 'cell', 'Desc_PlutoniumPellet_C'],
+      ['cell', 'purod', 'Desc_PlutoniumCell_C'],
+      ['purod', 'pu', 'Desc_PlutoniumFuelRod_C'],
+    ],
+  ]
+}
+
+describe('byproducts', () => {
+  const HOR = 'Desc_HeavyOilResidue_C'
+  const RESIN = 'Desc_PolymerResin_C'
+  // Plastic: 30 oil → 20 plastic + 10 heavy oil residue a minute. Residual Fuel: 60 residue → 40 fuel.
+  const plastic = recipeNode('pl', 'Recipe_Plastic_C', REFINERY)
+  const residualFuel = recipeNode('rf', 'Recipe_ResidualFuel_C', REFINERY)
+  // Fuel: 60 oil → 40 fuel + 30 resin. Residual Rubber: 40 resin + 40 water → 20 rubber.
+  const fuel = recipeNode('fu', 'Recipe_LiquidFuel_C', REFINERY)
+  const rubber = recipeNode('rr', 'Recipe_ResidualRubber_C', REFINERY)
+
+  it('spare byproduct fills a chain with no goal of its own', () => {
+    const r = solvePlan(
+      plan([goalNode('g', 'Desc_Plastic_C', 20), plastic, residualFuel], [
+        ['pl', 'g', 'Desc_Plastic_C'],
+        ['pl', 'rf', HOR],
+      ]),
+      catalog,
+    )
+    expect(r.nodes.get('pl')!.activity).toBeCloseTo(1)
+    expect(r.nodes.get('rf')!.outputs[0].produced).toBeCloseTo(20 / 3)
+    expect(r.goals[1]).toMatchObject({ openEndOf: 'rf', achieved: expect.closeTo(20 / 3) })
+    expect(r.totals.surplus).toEqual([])
+  })
+
+  it('a Max goal gets the spare byproduct even when the source has no room left', () => {
+    const r = solvePlan(
+      plan([supplyNode('oil', 'Desc_LiquidOil_C', 30), goalNode('g', 'Desc_Plastic_C', 20), plastic, residualFuel, goalNode('f', 'Desc_LiquidFuel_C', 'max')], [
+        ['oil', 'pl', 'Desc_LiquidOil_C'],
+        ['pl', 'g', 'Desc_Plastic_C'],
+        ['pl', 'rf', HOR],
+        ['rf', 'f', 'Desc_LiquidFuel_C'],
+      ]),
+      catalog,
+    )
+    expect(r.goals.find((g) => g.id === 'f')!.achieved).toBeCloseTo(20 / 3)
+    expect(r.nodes.get('oil')!.activity).toBeCloseTo(30)
+  })
+
+  it('spare byproduct is used before a dedicated producer', () => {
+    // 80 resin for 40 rubber: 30 spare from the fuel refinery, 50 from a Polymer Resin refinery.
+    const r = solvePlan(
+      plan(
+        [goalNode('gf', 'Desc_LiquidFuel_C', 40), fuel, recipeNode('pr', 'Recipe_Alternate_PolymerResin_C', REFINERY), rubber, goalNode('gr', 'Desc_Rubber_C', 40)],
+        [
+          ['fu', 'gf', 'Desc_LiquidFuel_C'],
+          ['fu', 'rr', RESIN],
+          ['pr', 'rr', RESIN],
+          ['rr', 'gr', 'Desc_Rubber_C'],
+        ],
+      ),
+      catalog,
+    )
+    expect(r.nodes.get('fu')!.activity).toBeCloseTo(1)
+    expect(r.edges.get('e1')!.perMin).toBeCloseTo(30)
+    expect(r.edges.get('e2')!.perMin).toBeCloseTo(50)
+    expect(r.goals.map((g) => g.achieved)).toEqual([40, expect.closeTo(40)])
+  })
+
+  it('a goal needing more than the spare byproduct falls short instead of growing its maker', () => {
+    const r = solvePlan(
+      plan([goalNode('gf', 'Desc_LiquidFuel_C', 40), fuel, rubber, goalNode('gr', 'Desc_Rubber_C', 100)], [
+        ['fu', 'gf', 'Desc_LiquidFuel_C'],
+        ['fu', 'rr', RESIN],
+        ['rr', 'gr', 'Desc_Rubber_C'],
+      ]),
+      catalog,
+    )
+    expect(r.nodes.get('fu')!.activity).toBeCloseTo(1)
+    expect(r.goals[1].achieved).toBeCloseTo(15)
+    expect(r.nodes.get('fu')!.bottleneck).toBe(true)
+  })
+
+  it('a maker with nothing else to run for is still pulled by its byproduct', () => {
+    // Only the residue belt is connected: the plastic refinery runs for it.
+    const r = solvePlan(
+      plan([plastic, residualFuel, goalNode('f', 'Desc_LiquidFuel_C', 20)], [
+        ['pl', 'rf', HOR],
+        ['rf', 'f', 'Desc_LiquidFuel_C'],
+      ]),
+      catalog,
+    )
+    expect(r.nodes.get('pl')!.activity).toBeCloseTo(3)
+    expect(r.goals[0].achieved).toBe(20)
+  })
+})

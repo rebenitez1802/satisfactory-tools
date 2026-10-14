@@ -16,9 +16,16 @@ describe('base pack', () => {
   })
 
   it('has the expected vanilla content', () => {
-    expect(catalog.recipes.size).toBe(276)
+    // 276 machine recipes plus 17 generator fuels.
+    expect(catalog.recipes.size).toBe(293)
     expect([...catalog.recipes.values()].filter((r) => r.alternate)).toHaveLength(111)
     expect([...catalog.machines.values()].filter((m) => m.category === 'production')).toHaveLength(11)
+    expect([...catalog.machines.values()].filter((m) => m.generation).map((m) => m.name).sort()).toEqual([
+      'Biomass Burner',
+      'Coal-Powered Generator',
+      'Fuel-Powered Generator',
+      'Nuclear Power Plant',
+    ])
     expect(catalog.purities.size).toBe(3)
     expect([...catalog.transportTiers.values()].map((t) => t.ratePerMin)).toEqual([
       60, 120, 270, 480, 780, 1200, 300, 600,
@@ -52,11 +59,32 @@ describe('base pack', () => {
   it('gives every recipe a power draw', () => {
     for (const r of catalog.recipes.values()) {
       const m = catalog.machines.get(r.machines[0])!
+      if (m.generation) continue
       // Variable-power machines list 0 MW themselves; their recipes carry the range.
       expect(r.variablePower ? r.variablePower.maxMw : m.powerMw, r.id).toBeGreaterThan(0)
       if (r.variablePower) expect(m.powerMw, r.id).toBe(0)
     }
     expect(catalog.recipes.get('base:Recipe_SpaceElevatorPart_10_C')?.variablePower).toBeUndefined()
+  })
+
+  it('turns each generator fuel into a recipe, with water and waste', () => {
+    const uranium = catalog.recipes.get('base:Recipe_GeneratorNuclear_NuclearFuelRod_C')!
+    const perMin = (a: { amount: number }, r = uranium) => (a.amount * 60) / r.durationSec
+    expect(catalog.machines.get(uranium.machines[0])!.generation).toEqual({ powerMw: 2500 })
+    // 0.2 rods, 240 m³ water and 10 waste per minute (satisfactory.wiki.gg).
+    expect(uranium.inputs.map((a) => perMin(a))).toEqual([0.2, 240])
+    expect(uranium.outputs).toEqual([{ item: 'base:Desc_NuclearWaste_C', amount: 50 }])
+    const plutonium = catalog.recipes.get('base:Recipe_GeneratorNuclear_PlutoniumFuelRod_C')!
+    expect(perMin(plutonium.inputs[0], plutonium)).toBeCloseTo(0.1)
+    expect(perMin(plutonium.outputs[0], plutonium)).toBeCloseTo(1)
+    expect(catalog.recipes.get('base:Recipe_GeneratorNuclear_FicsoniumFuelRod_C')!.outputs).toEqual([])
+    const coal = catalog.recipes.get('base:Recipe_GeneratorCoal_Coal_C')!
+    expect(coal.inputs.map((a) => perMin(a, coal))).toEqual([15, 45])
+    const fuel = catalog.recipes.get('base:Recipe_GeneratorFuel_LiquidFuel_C')!
+    expect(fuel.inputs.map((a) => perMin(a, fuel))).toEqual([20])
+    const waste = catalog.items.get('base:Desc_NuclearWaste_C')!
+    expect(waste.radioactive).toBe(true)
+    expect(waste.sinkPoints).toBeUndefined()
   })
 
   it('names the items that go in shard and Somersloop slots', () => {

@@ -3,9 +3,9 @@
 // missing, nodes pointing at its content stay in the plan and render as
 // unresolved instead of being dropped.
 //
-// Sizing follows targets and limits (docs/production-planner.md): goals carry
-// a target, any other node may be `limited`, and everything else is flexible
-// and sized by the solver.
+// Sizing follows targets and limits (docs/production-planner.md): goals and
+// generator groups carry a target, any other node may be `limited`, and
+// everything else is flexible and sized by the solver.
 
 import type { ItemId, MachineId, PurityId, RecipeId, TransportTierId } from '../catalog'
 
@@ -45,6 +45,12 @@ export interface RecipeNode extends PlanNodeBase {
   clock: number
   /** Somersloops per machine. */
   sloops: number
+  /**
+   * Generator groups only: a 🎯 power target in MW, or Max to burn all the
+   * fuel the plan can supply. Either makes the group an anchor, like a goal.
+   * Absent: flexible, sized by demand for its waste.
+   */
+  power?: number | 'max'
 }
 
 /** Extractors on a group of resource sites (nodes, or satellites of one well). */

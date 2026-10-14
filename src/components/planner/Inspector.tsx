@@ -12,7 +12,7 @@ import {
   shardsNeeded,
   sloopSlots,
 } from '../../planner'
-import type { ExtractorNode, GoalNode, Plan, PlanEdge, PlanNode, RecipeNode, SolveResult, SupplyNode } from '../../planner'
+import type { ExtractorNode, GoalNode, NodeResult, Plan, PlanEdge, PlanNode, RecipeNode, SolveResult, SupplyNode } from '../../planner'
 import { fmt, mw, pct } from './format'
 import { Icon } from './Icon'
 import { nodeLabel } from './labels'
@@ -131,7 +131,9 @@ function NodeInspector({
   return (
     <>
       <h3>{nodeLabel(node, catalog)}</h3>
-      {node.kind === 'recipe' && <RecipeFields node={node} catalog={catalog} actions={actions} isRecipeHidden={isRecipeHidden} />}
+      {node.kind === 'recipe' && (
+        <RecipeFields node={node} res={res} catalog={catalog} actions={actions} isRecipeHidden={isRecipeHidden} />
+      )}
       {node.kind === 'extractor' && <ExtractorFields node={node} catalog={catalog} actions={actions} />}
       {node.kind === 'supply' && <SupplyFields node={node} actions={actions} />}
       {node.kind === 'goal' && <GoalFields node={node} achieved={result.goals.find((g) => g.id === node.id)?.achieved ?? 0} actions={actions} />}
@@ -153,7 +155,11 @@ function NodeInspector({
             <UpgradeTotals node={node} shardsEach={res.setup.shards} count={res.setup.count} catalog={catalog} />
           )}
           {res.clock !== undefined && <div>Runs @ {pct(res.clock)}</div>}
-          {node.kind !== 'supply' && <div>⚡ {mw(res.powerMw)}</div>}
+          {res.generatedMw !== undefined ? (
+            <div className="pn-power-made">⚡ makes {mw(res.generatedMw)}</div>
+          ) : (
+            node.kind !== 'supply' && <div>⚡ {mw(res.powerMw)}</div>
+          )}
           {res.utilization !== undefined && <div>Using {pct(res.utilization)}{res.limit !== undefined ? ' of its limit' : ' of configured nodes'}</div>}
           {res.bottleneck && <div className="pn-bad">Bottleneck: this limit caps the chain.</div>}
         </div>
@@ -179,24 +185,43 @@ function NodeInspector({
   )
 }
 
-function SizingField({ node, actions }: { node: RecipeNode | ExtractorNode | SupplyNode; actions: InspectorActions }) {
+function SizingField({
+  node,
+  actions,
+  generator,
+}: {
+  node: RecipeNode | ExtractorNode | SupplyNode
+  actions: InspectorActions
+  /** Generators are sized by their power setting; a limit only caps the machine count. */
+  generator?: boolean
+}) {
+  const hint = generator
+    ? node.limited
+      ? 'At most this many machines, whatever the power setting asks for.'
+      : 'As many machines as the power setting needs.'
+    : node.limited
+      ? 'A limit: this is all you have. Other nodes adapt to it.'
+      : 'Sizes itself from the targets and limits around it.'
   return (
-    <Field
-      label="Sizing"
-      hint={node.limited ? 'A limit: this is all you have. Other nodes adapt to it.' : 'Sizes itself from the targets and limits around it.'}
-    >
-      <Seg value={node.limited ? 1 : 0} options={[[0, 'Auto'], [1, '⛔ Limit']]} onChange={(v) => actions.update(node.id, { limited: v === 1 })} />
+    <Field label={generator ? 'Machines' : 'Sizing'} hint={hint}>
+      <Seg
+        value={node.limited ? 1 : 0}
+        options={[[0, generator ? 'Any number' : 'Auto'], [1, '⛔ Limit']]}
+        onChange={(v) => actions.update(node.id, { limited: v === 1 })}
+      />
     </Field>
   )
 }
 
 function RecipeFields({
   node,
+  res,
   catalog,
   actions,
   isRecipeHidden,
 }: {
   node: RecipeNode
+  res: NodeResult | undefined
   catalog: Catalog
   actions: InspectorActions
   isRecipeHidden: (id: string) => boolean
@@ -214,7 +239,10 @@ function RecipeFields({
 
   return (
     <>
-      <Field label="Recipe" hint={options.length > 1 ? 'Per machine at 100%. Hover an icon for the item name.' : undefined}>
+      <Field
+        label={machine.generation ? 'Fuel' : 'Recipe'}
+        hint={options.length > 1 ? 'Per machine at 100%. Hover an icon for the item name.' : undefined}
+      >
         <RecipeSelect value={node.recipe} options={options} catalog={catalog} onChange={(id) => actions.setRecipe(node.id, id)} />
       </Field>
       {recipe.machines.length > 1 ? (
@@ -235,7 +263,8 @@ function RecipeFields({
           </div>
         </Field>
       )}
-      <SizingField node={node} actions={actions} />
+      {machine.generation && <PowerField node={node} powerMw={machine.generation.powerMw} made={res?.generatedMw ?? 0} actions={actions} />}
+      <SizingField node={node} actions={actions} generator={!!machine.generation} />
       {node.limited && (
         <Field label="Machines you have">
           <NumberField value={node.count} min={0} step={1} width={80} onChange={(count) => actions.update(node.id, { count })} />
@@ -254,6 +283,38 @@ function RecipeFields({
         <ClockField value={node.clock} min={minClock(machine)} max={maxClock(machine)} onChange={(clock) => actions.update(node.id, { clock })} />
       </Field>
       {slots > 0 && <SloopField slots={slots} sloops={node.sloops} item={upgrades.sloop} boost={boost} onChange={(sloops) => actions.update(node.id, { sloops })} />}
+    </>
+  )
+}
+
+/** A generator group's anchor: a power target, Max, or sized by demand for its waste. */
+function PowerField({ node, powerMw, made, actions }: { node: RecipeNode; powerMw: number; made: number; actions: InspectorActions }) {
+  const mode = node.power === undefined ? 'auto' : node.power === 'max' ? 'max' : 'target'
+  const hints = {
+    target: 'Fuel chains upstream size themselves to make this much power.',
+    max: 'Burns all the fuel the limits upstream allow.',
+    auto: 'Sized by demand for its waste, like any other machine group.',
+  }
+  return (
+    <>
+      <Field label="Power" hint={hints[mode]}>
+        <Seg
+          value={mode}
+          options={[
+            ['target', '🎯 Target'],
+            ['max', 'Max'],
+            ['auto', 'On demand'],
+          ]}
+          onChange={(v) =>
+            actions.update(node.id, { power: v === 'auto' ? undefined : v === 'max' ? 'max' : Math.round(made) || powerMw })
+          }
+        />
+      </Field>
+      {typeof node.power === 'number' && (
+        <Field label="Power to make" hint={`${fmt(node.power / powerMw)} machine${Math.abs(node.power / powerMw - 1) < 1e-9 ? '' : 's'} at 100%`}>
+          <NumberField value={node.power} min={0} step={powerMw} width={100} suffix="MW" onChange={(power) => actions.update(node.id, { power })} />
+        </Field>
+      )}
     </>
   )
 }

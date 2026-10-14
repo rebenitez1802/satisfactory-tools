@@ -152,10 +152,15 @@ function RecipeCard({ data, selected }: NodeProps<PlanFlowNode>) {
   const sloops = Math.min(node.sloops, sloopSlots(machine))
   const built = Math.ceil(setup.count - EPS)
   const upgrades = upgradeItems(machine, catalog)
+  const made = res.generatedMw
+  const goal = result.goals.find((g) => g.id === node.id)
+  const short = goal && goal.requested !== 'max' && goal.achieved < goal.requested - EPS
   const tip = [
     `${recipe.name}${recipe.alternate ? ' (alternate)' : ''}`,
     `${fmt(setup.count)} × ${machine.name} @ ${pct(setup.clock)}`,
-    `⚡ ${mw(res.powerMw)}`,
+    made !== undefined ? `⚡ makes ${mw(made)}` : `⚡ ${mw(res.powerMw)}`,
+    node.power === 'max' ? 'Burns all the fuel it can get (Max)' : '',
+    typeof node.power === 'number' ? `Target: ${mw(node.power)}${short ? ` (${pct(goal!.achieved / node.power)})` : ''}` : '',
     node.limited ? `Limit: ${fmt(node.count)} machines${res.utilization !== undefined ? `, using ${pct(res.utilization)}` : ''}` : '',
     res.bottleneck ? 'Bottleneck' : '',
   ]
@@ -166,10 +171,16 @@ function RecipeCard({ data, selected }: NodeProps<PlanFlowNode>) {
     <Card
       res={res}
       selected={selected}
-      kind="recipe"
+      kind={made !== undefined ? 'recipe pn-generator' : 'recipe'}
       tip={tip}
+      tint={goal ? (short || goal.achieved <= EPS ? 'bad' : 'good') : undefined}
       badges={
         <>
+          {node.power !== undefined && (
+            <span className="pn-b pn-b-power" title={node.power === 'max' ? 'Max: burns all the fuel it can get' : `Target: ${mw(node.power)}`}>
+              {node.power === 'max' ? 'MAX' : '🎯'}
+            </span>
+          )}
           {recipe.alternate && <span className="pn-b pn-b-alt">ALT</span>}
           {setup.shards > 0 && (
             <span className="pn-b pn-b-up">
@@ -198,6 +209,7 @@ function RecipeCard({ data, selected }: NodeProps<PlanFlowNode>) {
       <Icon of={machine} size={48} title={tip} />
       <span className="pn-big">{fmt(setup.count)}</span>
       {Math.abs(setup.clock - 1) > EPS && <span className="pn-small">@ {pct(setup.clock)}</span>}
+      {made !== undefined && <span className="pn-small pn-power-made">⚡ {mw(made)}</span>}
       <Label node={node} />
     </Card>
   )

@@ -9,7 +9,7 @@ export function pct(fraction: number): string {
   return `${Number((fraction * 100).toFixed(1))}%`
 }
 
-/** Short MW figure: 1 decimal under 100 MW, whole numbers above. */
+/** Short MW figure: 1 decimal under 100 MW, whole numbers above (with thousands separators). */
 export function mw(n: number): string {
-  return `${n >= 100 ? Math.round(n) : Number(n.toFixed(1))} MW`
+  return `${Math.abs(n) >= 100 ? Math.round(n).toLocaleString('en-US') : Number(n.toFixed(1))} MW`
 }

@@ -150,6 +150,29 @@
   background: rgba(239, 68, 68, 0.18);
   border-color: rgba(239, 68, 68, 0.5);
 }
+.pn-b-power {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: rgba(245, 158, 11, 0.6);
+  color: var(--accent);
+}
+.pn-power-made {
+  color: var(--accent);
+  font-weight: 600;
+}
+/* Four summary tiles (power used, made, net, buildings): smaller figures so 5 digits fit. */
+.pn-stats-power .stat {
+  padding: 10px 6px;
+}
+.pn-stats-power .stat-value {
+  font-size: 20px;
+  white-space: nowrap;
+}
+.pn-stats-power .stat-value.pn-good {
+  color: var(--green);
+}
+.pn-stats-power .stat-value.pn-bad {
+  color: var(--red);
+}
 
 /* Ports: one item icon per row, handle on the card edge */
 .pn-port {
@@ -779,6 +802,9 @@
 }
 .pn-io-arrow {
   color: var(--text-dim);
+}
+.pn-io-power {
+  color: var(--accent);
 }
 .pn-io-machine {
   margin-left: auto;

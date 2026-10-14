@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Catalog, Recipe } from '../../catalog'
+import { recipeItem } from '../../planner'
 import { Icon } from './Icon'
 import { RecipeIO } from './RecipeIO'
 
@@ -59,7 +60,7 @@ export function RecipeSelect({
   }
 
   const row = (r: Recipe) => {
-    const product = catalog.items.get(r.outputs[0].item)
+    const product = catalog.items.get(recipeItem(catalog, r) ?? '')
     return (
       <>
         {product && <Icon of={product} size={30} />}

@@ -7,6 +7,8 @@
 //     plan, and goals reached that way take whatever arrives (Max).
 //   - Starting from the palette: sources are ⛔ limits ("this is what I have")
 //     and goals get a 🎯 number ("this is what I want").
+//   - Generators are anchors like goals: a 🎯 power target from the palette,
+//     Max when added from a fuel output.
 
 import type { Catalog, Item, ItemId, Machine, Recipe } from '../catalog'
 import type { PlanNode } from './types'
@@ -123,11 +125,21 @@ export function resourceOptions(catalog: Catalog): PickOption[] {
     .map((p): PickOption => ({ kind: 'extractor', ...p }))
 }
 
-/** Every item as a goal, by name. */
+/**
+ * What a plan can aim for: power first (every generator and fuel, since a
+ * generator is an anchor like a goal; biggest generators first), then every
+ * item as a goal, by name.
+ */
 export function goalOptions(catalog: Catalog): PickOption[] {
-  return [...catalog.items.values()]
+  const mw = (r: Recipe) => catalog.machines.get(r.machines[0])?.generation?.powerMw ?? 0
+  const power = [...catalog.recipes.values()]
+    .filter((r) => mw(r) > 0)
+    .sort((a, b) => mw(b) - mw(a) || a.name.localeCompare(b.name))
+    .map((recipe): PickOption => ({ kind: 'recipe', recipe }))
+  const items = [...catalog.items.values()]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((item): PickOption => ({ kind: 'goal', item }))
+  return [...power, ...items]
 }
 
 /** The purity new extractors start on: the 1× tier if there is one, else the middle one. */
@@ -145,7 +157,8 @@ export function createNode(
 ): PlanNode {
   const fromPalette = context === 'palette'
   switch (option.kind) {
-    case 'recipe':
+    case 'recipe': {
+      const gen = catalog.machines.get(option.recipe.machines[0])?.generation
       return {
         id,
         kind: 'recipe',
@@ -156,7 +169,11 @@ export function createNode(
         count: 1,
         clock: 1,
         sloops: 0,
+        // Generators are where fuel chains end: from the palette, one machine's
+        // worth of power; from a fuel output, burn whatever arrives.
+        ...(gen ? { power: fromPalette ? gen.powerMw : ('max' as const) } : {}),
       }
+    }
     case 'extractor':
       return {
         id,

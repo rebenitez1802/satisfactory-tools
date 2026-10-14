@@ -3,7 +3,7 @@
 // Every node has an *activity*: machines-at-100% for recipe nodes, items/min
 // for extractors, supplies and goals. Its port rates are activity × a fixed
 // per-unit rate, so the whole plan is driven by demand flowing upstream from
-// the goals:
+// its anchors: goals, and generator groups with a power target:
 //
 //   1. Demand pass with the numeric targets. In each connected chain, if a
 //      limited node would exceed its limit, scale that chain's targets by the
@@ -16,11 +16,23 @@
 // pass is positively homogeneous but not linear. That makes step 2
 // conservative (never over a limit), not always exactly tight. Loops in the
 // graph are handled by iterating the demand pass until it settles.
+//
+// Byproducts break the pull model: a refinery making plastic for a goal
+// shouldn't grow because something downstream wants more of its heavy oil
+// residue, and a chain fed only by that residue has no demand at all. So the
+// plan is solved in *stages*. Belts carrying a byproduct (a recipe's second
+// output, or a generator's waste) cut the plan where the maker's own stage
+// has an anchor. Stages are solved producers first, and each cut belt arrives
+// in the next stage as a limited supply of what the maker has spare, used
+// before any other producer of that item. Open ends then fill the
+// downstream chain from it. A byproduct whose maker has nothing else to run
+// for is still pulled like a main product.
 
 import type { Catalog, ItemId, Machine, MachineId, Recipe } from '../catalog'
 import {
   extractorPowerMw,
   extractorRate,
+  generatedMw,
   groupPowerMw,
   machineSetup,
   maxClock,
@@ -28,7 +40,7 @@ import {
   shardsNeeded,
 } from './rates'
 import type { ItemRate, MachineSetup } from './rates'
-import type { Plan, PlanEdge, PlanNode } from './types'
+import type { Plan, PlanEdge, PlanNode, SupplyNode } from './types'
 
 const EPS = 1e-9
 const MAX_ITER = 1000
@@ -62,7 +74,10 @@ export interface NodeResult {
   setup?: MachineSetup
   /** Extractor nodes: the clock the extractors actually need to run at. */
   clock?: number
+  /** Power drawn, in MW. */
   powerMw: number
+  /** Generators: power made, in MW. */
+  generatedMw?: number
   /** Limited nodes: the limit, in activity units. */
   limit?: number
   /**
@@ -80,9 +95,13 @@ export interface NodeResult {
 
 export interface GoalResult {
   id: string
+  /** The goal's item; for a generator, its fuel. */
   item: ItemId
+  /** Items/min, or MW for a generator group (`power`). */
   requested: number | 'max'
   achieved: number
+  /** A generator group's power target rather than an item goal. */
+  power?: boolean
   /**
    * Set for an open end treated as a Max goal: the node whose unconnected
    * output it is. `id` is then not a plan node.
@@ -114,7 +133,10 @@ export interface Merge {
 }
 
 export interface PlanTotals {
+  /** Power drawn by machines, in MW. */
   powerMw: number
+  /** Power made by generators, in MW. Net power is generatedMw − powerMw. */
+  generatedMw: number
   /** Machines per type, as counted by the plan's machine mode. */
   machines: Map<MachineId, number>
   shards: number
@@ -155,9 +177,23 @@ interface Unit {
   machine?: Machine
   /** Extractors: output of the configured sites at the configured clock. */
   configured?: number
+  /** Outputs the node isn't run for: a recipe's extra outputs, a generator's waste. */
+  byproducts: Set<ItemId>
+  /**
+   * Goals and generators with a power target: the activity is set (a number,
+   * in activity units) or as high as the limits allow, not derived.
+   */
+  anchor?: number | 'max'
+  /** Generators: MW per unit of activity. */
+  mwPerUnit?: number
+  /** A byproduct arriving from an earlier stage: consumers use it first. */
+  spare?: boolean
 }
 
 const key = (node: string, item: ItemId) => `${node}\u0000${item}`
+
+const NONE = new Set<ItemId>()
+const SPARE = '~spare:'
 
 function unitOf(node: PlanNode, catalog: Catalog): Unit | undefined {
   switch (node.kind) {
@@ -167,12 +203,22 @@ function unitOf(node: PlanNode, catalog: Catalog): Unit | undefined {
       if (!recipe || !machine) return undefined
       const perMachine = (60 / recipe.durationSec) * machine.speed
       const boost = outputMultiplier(machine, node.sloops)
+      const gen = machine.generation
+      const mwPerUnit = gen ? generatedMw(machine, 1) : undefined
       return {
         inputs: new Map(recipe.inputs.map((a) => [a.item, a.amount * perMachine])),
         outputs: new Map(recipe.outputs.map((a) => [a.item, a.amount * perMachine * boost])),
         limit: node.limited ? node.count * node.clock : undefined,
         recipe,
         machine,
+        byproducts: new Set((gen ? recipe.outputs : recipe.outputs.slice(1)).map((a) => a.item)),
+        mwPerUnit,
+        anchor:
+          !mwPerUnit || node.power === undefined
+            ? undefined
+            : node.power === 'max'
+              ? 'max'
+              : Math.max(0, node.power) / mwPerUnit,
       }
     }
     case 'extractor': {
@@ -185,14 +231,26 @@ function unitOf(node: PlanNode, catalog: Catalog): Unit | undefined {
         limit: node.limited ? configured : undefined,
         machine,
         configured,
+        byproducts: NONE,
       }
     }
     case 'supply':
       if (!catalog.items.has(node.item)) return undefined
-      return { inputs: new Map(), outputs: new Map([[node.item, 1]]), limit: node.limited ? node.perMin : undefined }
+      return {
+        inputs: new Map(),
+        outputs: new Map([[node.item, 1]]),
+        limit: node.limited ? node.perMin : undefined,
+        byproducts: NONE,
+        spare: node.id.startsWith(SPARE),
+      }
     case 'goal':
       if (!catalog.items.has(node.item)) return undefined
-      return { inputs: new Map([[node.item, 1]]), outputs: new Map() }
+      return {
+        inputs: new Map([[node.item, 1]]),
+        outputs: new Map(),
+        byproducts: NONE,
+        anchor: node.target === 'max' ? 'max' : Math.max(0, node.target),
+      }
   }
 }
 
@@ -296,11 +354,17 @@ function demandPass(g: Graph, goalValues: Map<string, number>): Pass {
   for (let iter = 0; iter < MAX_ITER && !converged; iter++) {
     let maxDelta = 0
     let scale = 1
+    /** Flow handed out so far this round by each spare-byproduct supply. */
+    const taken = new Map<string, number>()
+    const take = (e: PlanEdge, f: number) => {
+      edgeFlow.set(e.id, f)
+      if (g.units.get(e.source)!.spare) taken.set(e.source, (taken.get(e.source) ?? 0) + f)
+    }
     for (const n of g.order) {
       const unit = g.units.get(n.id)
       if (!unit) continue
       let a = 0
-      if (n.kind === 'goal') a = goalValues.get(n.id) ?? 0
+      if (unit.anchor !== undefined) a = goalValues.get(n.id) ?? 0
       else {
         for (const [item, perUnit] of unit.outputs) {
           const demand = (g.out.get(key(n.id, item)) ?? []).reduce((s, e) => s + edgeFlow.get(e.id)!, 0)
@@ -314,8 +378,20 @@ function demandPass(g: Graph, goalValues: Map<string, number>): Pass {
       for (const [item, perUnit] of unit.inputs) {
         const feeding = g.in.get(key(n.id, item))
         if (!feeding) continue
-        const shares = feeding.reduce((s, e) => s + (e.share ?? 1), 0)
-        for (const e of feeding) edgeFlow.set(e.id, (a * perUnit * (e.share ?? 1)) / shares)
+        let need = a * perUnit
+        // Spare byproducts go first; the other producers make up the rest.
+        const rest = feeding.filter((e) => !g.units.get(e.source)!.spare)
+        if (rest.length && rest.length < feeding.length) {
+          for (const e of feeding) {
+            if (!g.units.get(e.source)!.spare) continue
+            const f = Math.min(need, Math.max(0, g.units.get(e.source)!.limit! - (taken.get(e.source) ?? 0)))
+            take(e, f)
+            need -= f
+          }
+        }
+        const split = rest.length ? rest : feeding
+        const shares = split.reduce((s, e) => s + (e.share ?? 1), 0)
+        for (const e of split) take(e, (need * (e.share ?? 1)) / shares)
       }
     }
     converged = maxDelta <= EPS * scale
@@ -332,15 +408,16 @@ const OPEN_END = '~open:'
  */
 function withOpenEnds(plan: Plan, catalog: Catalog): Plan {
   const g = buildGraph(plan, catalog, [])
-  const withGoal = new Set(plan.nodes.filter((n) => n.kind === 'goal').map((n) => g.component.get(n.id)))
+  const withGoal = new Set(plan.nodes.filter((n) => g.units.get(n.id)?.anchor !== undefined).map((n) => g.component.get(n.id)))
   const withLimit = new Set(plan.nodes.filter((n) => g.units.get(n.id)?.limit !== undefined).map((n) => g.component.get(n.id)))
   const feeding = new Set(g.edges.map((e) => e.source))
   const nodes: PlanNode[] = []
   const edges: PlanEdge[] = []
   for (const n of plan.nodes) {
     const c = g.component.get(n.id)
-    const main = g.units.get(n.id)?.outputs.keys().next().value
-    if (n.kind === 'goal' || !main || feeding.has(n.id) || withGoal.has(c) || !withLimit.has(c)) continue
+    const unit = g.units.get(n.id)
+    const main = unit?.outputs.keys().next().value
+    if (unit?.anchor !== undefined || !main || feeding.has(n.id) || withGoal.has(c) || !withLimit.has(c)) continue
     const id = `${OPEN_END}${n.id}`
     nodes.push({ id, kind: 'goal', position: n.position, item: main, target: 'max' })
     edges.push({ id, source: n.id, target: id, item: main })
@@ -348,10 +425,128 @@ function withOpenEnds(plan: Plan, catalog: Catalog): Plan {
   return nodes.length ? { ...plan, nodes: [...plan.nodes, ...nodes], edges: [...plan.edges, ...edges] } : plan
 }
 
+/**
+ * Group nodes into stages (see the top of this file) and order them so every
+ * stage comes after the stages whose byproducts it takes. `cross` are the
+ * byproduct belts between stages.
+ */
+function splitStages(g: Graph): { stages: string[][]; cross: PlanEdge[] } {
+  const ids = g.nodes.filter((n) => g.units.has(n.id)).map((n) => n.id)
+  const parent = new Map(ids.map((id) => [id, id]))
+  const find = (x: string): string => {
+    let r = x
+    while (parent.get(r) !== r) r = parent.get(r)!
+    parent.set(x, r)
+    return r
+  }
+  const union = (a: string, b: string) => parent.set(find(a), find(b))
+  const byproduct = (e: PlanEdge) => g.units.get(e.source)!.byproducts.has(e.item)
+  const between = () => g.edges.filter((e) => find(e.source) !== find(e.target))
+
+  for (const e of g.edges) if (!byproduct(e)) union(e.source, e.target)
+  // A byproduct only arrives as spare when its maker's stage has an anchor
+  // to run for; otherwise the consumer's demand is what runs the maker.
+  for (let changed = true; changed; ) {
+    changed = false
+    const anchored = new Set(ids.filter((id) => g.units.get(id)!.anchor !== undefined).map(find))
+    for (const e of between()) {
+      if (!anchored.has(find(e.source))) {
+        union(e.source, e.target)
+        changed = true
+      }
+    }
+  }
+  // Stages that feed each other round a loop are solved together.
+  for (let changed = true; changed; ) {
+    changed = false
+    const next = new Map<string, string[]>()
+    for (const e of between()) pushTo(next, find(e.source), find(e.target))
+    const reaches = (from: string, to: string) => {
+      const seen = new Set([from])
+      const queue = [from]
+      while (queue.length) {
+        const s = queue.pop()!
+        if (s === to) return true
+        for (const t of next.get(s) ?? []) if (!seen.has(t)) seen.add(t), queue.push(t)
+      }
+      return false
+    }
+    const loop = between().find((e) => reaches(find(e.target), find(e.source)))
+    if (loop) {
+      union(loop.source, loop.target)
+      changed = true
+    }
+  }
+
+  const cross = between()
+  const members = new Map<string, string[]>()
+  for (const id of ids) pushTo(members, find(id), id)
+  const waiting = new Map([...members.keys()].map((s) => [s, 0]))
+  for (const e of cross) waiting.set(find(e.target), waiting.get(find(e.target))! + 1)
+  const order: string[] = []
+  const queue = [...members.keys()].filter((s) => waiting.get(s) === 0)
+  while (queue.length) {
+    const s = queue.shift()!
+    order.push(s)
+    for (const e of cross) {
+      if (find(e.source) !== s) continue
+      const t = find(e.target)
+      waiting.set(t, waiting.get(t)! - 1)
+      if (waiting.get(t) === 0) queue.push(t)
+    }
+  }
+  return { stages: order.map((s) => members.get(s)!), cross }
+}
+
 export function solvePlan(plan: Plan, catalog: Catalog): SolveResult {
-  const augmented = withOpenEnds(plan, catalog)
-  const result = solveAnchored(augmented, catalog)
-  if (augmented === plan) return result
+  const diagnostics: PlanDiagnostic[] = []
+  const whole = buildGraph(plan, catalog, diagnostics)
+  const { stages, cross } = splitStages(whole)
+
+  const pass: Pass = { activity: new Map(), edgeFlow: new Map(), converged: true }
+  const goalValues = new Map<string, number>()
+  const bottlenecks = new Set<string>()
+  const openEnds: Plan = { ...plan, nodes: [], edges: [] }
+  const portFlow = (node: string, item: ItemId) =>
+    (whole.out.get(key(node, item)) ?? []).reduce((s, e) => s + (pass.edgeFlow.get(e.id) ?? 0), 0)
+
+  for (const stage of stages) {
+    const inStage = new Set(stage)
+    // Byproducts from earlier stages arrive as limited supplies of what's spare.
+    const spares = new Map<string, SupplyNode>()
+    const makerOf = new Map<string, string>()
+    const arriving: PlanEdge[] = []
+    for (const e of cross) {
+      if (!inStage.has(e.target)) continue
+      const id = `${SPARE}${e.source}\u0000${e.item}`
+      if (!spares.has(id)) {
+        const produced = (pass.activity.get(e.source) ?? 0) * whole.units.get(e.source)!.outputs.get(e.item)!
+        const perMin = Math.max(0, produced - portFlow(e.source, e.item))
+        spares.set(id, { id, kind: 'supply', position: { x: 0, y: 0 }, item: e.item, limited: true, perMin })
+        makerOf.set(id, e.source)
+      }
+      arriving.push({ ...e, source: id })
+    }
+    const sub: Plan = {
+      ...plan,
+      nodes: [...whole.nodes.filter((n) => inStage.has(n.id)), ...spares.values()],
+      edges: [...whole.edges.filter((e) => inStage.has(e.source) && inStage.has(e.target)), ...arriving],
+    }
+    const real = (id: string) => makerOf.get(id) ?? id
+    const sol = solveStage(sub, catalog)
+    for (const [id, a] of sol.pass.activity) if (!makerOf.has(id)) pass.activity.set(id, a)
+    for (const [id, f] of sol.pass.edgeFlow) pass.edgeFlow.set(id, f)
+    pass.converged &&= sol.pass.converged
+    for (const [id, v] of sol.goalValues) goalValues.set(id, v)
+    for (const id of sol.bottlenecks) bottlenecks.add(real(id))
+    for (const d of sol.diagnostics) diagnostics.push(d.nodeId ? { ...d, nodeId: real(d.nodeId) } : d)
+    for (const n of sol.plan.nodes) if (n.id.startsWith(OPEN_END)) openEnds.nodes.push(n)
+    for (const e of sol.plan.edges) if (e.id.startsWith(OPEN_END)) openEnds.edges.push(e)
+  }
+
+  const augmented = { ...plan, nodes: [...plan.nodes, ...openEnds.nodes], edges: [...plan.edges, ...openEnds.edges] }
+  const result = assemble(augmented, catalog, buildGraph(augmented, catalog, []), pass, goalValues, bottlenecks, diagnostics)
+  if (augmented.nodes.length === plan.nodes.length) return result
   // Hide the implicit goals and their belts; keep them as goals marked open-end.
   for (const id of [...result.nodes.keys()]) if (id.startsWith(OPEN_END)) result.nodes.delete(id)
   for (const id of [...result.edges.keys()]) if (id.startsWith(OPEN_END)) result.edges.delete(id)
@@ -362,10 +557,21 @@ export function solvePlan(plan: Plan, catalog: Catalog): SolveResult {
   return result
 }
 
-function solveAnchored(plan: Plan, catalog: Catalog): SolveResult {
+interface StageSolution {
+  /** The stage's plan with its open-end goals added. */
+  plan: Plan
+  pass: Pass
+  goalValues: Map<string, number>
+  bottlenecks: Set<string>
+  diagnostics: PlanDiagnostic[]
+}
+
+function solveStage(stage: Plan, catalog: Catalog): StageSolution {
+  const plan = withOpenEnds(stage, catalog)
   const diagnostics: PlanDiagnostic[] = []
-  const g = buildGraph(plan, catalog, diagnostics)
-  const goals = plan.nodes.filter((n) => n.kind === 'goal')
+  const g = buildGraph(plan, catalog, [])
+  const goals = plan.nodes.filter((n) => g.units.get(n.id)?.anchor !== undefined)
+  const anchor = (id: string) => g.units.get(id)!.anchor!
   const limited = plan.nodes.filter((n) => g.units.get(n.id)?.limit !== undefined)
 
   /** Smallest limit / usage ratio per component, and the nodes achieving it. */
@@ -385,7 +591,10 @@ function solveAnchored(plan: Plan, catalog: Catalog): SolveResult {
 
   // 1. Numeric targets, scaled down per chain if a limit binds.
   const targets = new Map<string, number>()
-  for (const n of goals) if (n.kind === 'goal' && n.target !== 'max') targets.set(n.id, Math.max(0, n.target))
+  for (const n of goals) {
+    const a = anchor(n.id)
+    if (a !== 'max') targets.set(n.id, a)
+  }
   const t = demandPass(g, targets)
   const r = tightest(t.activity, (id) => g.units.get(id)!.limit!)
   const bottlenecks = new Set<string>()
@@ -405,7 +614,7 @@ function solveAnchored(plan: Plan, catalog: Catalog): SolveResult {
   // 2. Max goals share what the limits have left, fairly: each goal is
   //    weighted so it uses the same share of the limits as the others. Two
   //    open ends behind one miner therefore split its ore evenly.
-  const maxGoals = goals.filter((n) => n.kind === 'goal' && n.target === 'max')
+  const maxGoals = goals.filter((n) => anchor(n.id) === 'max')
   if (maxGoals.length) {
     const room = (id: string) => g.units.get(id)!.limit! - (t.activity.get(id) ?? 0)
     const weight = new Map<string, number>()
@@ -423,7 +632,10 @@ function solveAnchored(plan: Plan, catalog: Catalog): SolveResult {
         diagnostics.push({
           severity: 'warning',
           nodeId: n.id,
-          message: 'Max goal has no limit upstream; set a limit on a source or machine group.',
+          message:
+            n.kind === 'goal'
+              ? 'Max goal has no limit upstream; set a limit on a source or machine group.'
+              : 'Max power has no limit upstream; set a limit on a fuel source or machine group.',
         })
       }
     }
@@ -443,11 +655,11 @@ function solveAnchored(plan: Plan, catalog: Catalog): SolveResult {
   }
 
   // 3. Final rates.
-  const final = demandPass(g, goalValues)
-  if (!final.converged) {
+  const pass = demandPass(g, goalValues)
+  if (!pass.converged) {
     diagnostics.push({ severity: 'error', message: 'A loop in the plan never settles; its rates are not reliable.' })
   }
-  return assemble(plan, catalog, g, final, goalValues, bottlenecks, diagnostics)
+  return { plan, pass, goalValues, bottlenecks, diagnostics }
 }
 
 function assemble(
@@ -463,6 +675,7 @@ function assemble(
   const nodes = new Map<string, NodeResult>()
   const machines = new Map<MachineId, number>()
   let powerMw = 0
+  let generated = 0
   let shards = 0
   let sloops = 0
   const raw = new Map<ItemId, number>()
@@ -491,6 +704,17 @@ function assemble(
     })
     for (const p of inputs) if (!p.connected) add(missing, p.item, p.needed)
     if (n.kind !== 'goal') for (const p of outputs) add(surplus, p.item, p.produced - p.used)
+    for (const p of outputs) {
+      const item = catalog.items.get(p.item)
+      const left = p.produced - p.used
+      if (pass.converged && item?.radioactive && !item.sinkPoints && left > EPS * Math.max(1, p.produced)) {
+        diagnostics.push({
+          severity: 'warning',
+          nodeId: n.id,
+          message: `${Number(left.toFixed(2))} ${item.name}/min is left over and can't be sunk: process it or store it, or the machines stop when storage fills.`,
+        })
+      }
+    }
 
     const res: NodeResult = {
       id: n.id,
@@ -512,6 +736,10 @@ function assemble(
         : machineSetup(unit.machine, a, mode, { clock: n.clock })
       res.setup = setup
       res.powerMw = groupPowerMw(unit.machine, setup.count, setup.clock, n.sloops, unit.recipe)
+      if (unit.mwPerUnit !== undefined) {
+        res.generatedMw = a * unit.mwPerUnit
+        generated += res.generatedMw
+      }
       if (setup.count > EPS) {
         machines.set(unit.machine.id, (machines.get(unit.machine.id) ?? 0) + setup.count)
         const built = Math.ceil(setup.count - EPS)
@@ -583,9 +811,13 @@ function assemble(
     }
   }
 
-  const goals: GoalResult[] = plan.nodes.flatMap((n) =>
-    n.kind === 'goal' ? [{ id: n.id, item: n.item, requested: n.target, achieved: goalValues.get(n.id) ?? 0 }] : [],
-  )
+  const goals: GoalResult[] = plan.nodes.flatMap((n): GoalResult[] => {
+    if (n.kind === 'goal') return [{ id: n.id, item: n.item, requested: n.target, achieved: goalValues.get(n.id) ?? 0 }]
+    const unit = g.units.get(n.id)
+    if (n.kind !== 'recipe' || n.power === undefined || unit?.anchor === undefined) return []
+    const fuel = unit.recipe!.inputs[0]?.item ?? ''
+    return [{ id: n.id, item: fuel, requested: n.power, achieved: (goalValues.get(n.id) ?? 0) * unit.mwPerUnit!, power: true }]
+  })
   const rates = (m: Map<ItemId, number>): ItemRate[] => [...m].map(([item, perMin]) => ({ item, perMin }))
 
   return {
@@ -596,6 +828,7 @@ function assemble(
     merges,
     totals: {
       powerMw,
+      generatedMw: generated,
       machines,
       shards,
       sloops,

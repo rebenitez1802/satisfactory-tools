@@ -8,6 +8,8 @@
 // Example: a Constructor (4 MW) at 250% draws 4 × 2.5^1.321929 ≈ 13.4 MW. With
 // its one Somersloop it draws 4× that and doubles output, with the same inputs.
 // Variable-power machines use the recipe's average of min and max power.
+// Generators are linear instead: N machines' worth at 100% make N × their MW,
+// however the clock is set.
 // A fractional count like 2.4 is costed as it would be built: 2 machines at
 // the node's clock plus 1 machine at 40% of it. Power falls faster than the
 // clock, so this is cheaper than 2.4 × full power.
@@ -85,6 +87,11 @@ export function groupPowerMw(
   const frac = count - whole
   const full = whole * machinePowerMw(machine, clock, sloops, recipe)
   return frac > EPS ? full + machinePowerMw(machine, clock * frac, sloops, recipe) : full
+}
+
+/** Power made by a generator group running `throughput` machines' worth at 100%. */
+export function generatedMw(machine: Machine, throughput: number): number {
+  return (machine.generation?.powerMw ?? 0) * throughput
 }
 
 export function recipeFlows(

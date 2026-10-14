@@ -1,7 +1,8 @@
 // Build the `base` data pack (public/packs/base/pack.json) from greeny's
 // dataset plus the hand-written overlay. Keeps machine-run recipes only:
 // build-gun recipes, equipment, and FICSMAS (a separate file upstream) are
-// left out. Fluid amounts are already in m³.
+// left out. Fluid amounts are already in m³. Generators become machines with
+// one recipe per fuel, so the planner sizes fuel chains like any other.
 //
 //   node scripts/import-base.ts      (then scripts/fetch-icons.ts adds icons)
 
@@ -9,7 +10,20 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DataPack } from '../src/catalog/pack.ts'
 import type { Item, Machine, Recipe } from '../src/catalog/types.ts'
-import { EXTRACTORS, GAME_VERSION, GASES, OVERCLOCK, PRODUCTION, PURITIES, SUPPORT_MACHINES, TRANSPORT_TIERS, UPGRADE_ITEMS, VARIABLE_POWER } from './base-overlay.ts'
+import {
+  EXTRACTORS,
+  FUEL_WASTE,
+  GAME_VERSION,
+  GASES,
+  GENERATORS,
+  OVERCLOCK,
+  PRODUCTION,
+  PURITIES,
+  SUPPORT_MACHINES,
+  TRANSPORT_TIERS,
+  UPGRADE_ITEMS,
+  VARIABLE_POWER,
+} from './base-overlay.ts'
 import { GREENY_COMMIT, loadGreeny, ROOT } from './greeny.ts'
 
 export const PACK_DIR = join(ROOT, 'public', 'packs', 'base')
@@ -91,6 +105,42 @@ for (const [id, extra] of Object.entries(EXTRACTORS)) {
   })
 }
 for (const id of SUPPORT_MACHINES) machines.push(baseMachine(id, 'extraction'))
+
+// Generators: one recipe per fuel. A cycle is one unit of fuel (1 item, or
+// 1 m³ of a fluid fuel) burning for energy / power seconds; water and waste
+// are per cycle too.
+const WATER = 'Desc_Water_C'
+const shortName = (cls: string) => cls.replace(/^(Build|Desc)_/, '').replace(/_C$/, '')
+for (const [id, extra] of Object.entries(GENERATORS)) {
+  const gen = data.generators[toDesc(id)]
+  if (!gen) throw new Error(`No generator ${id} in source data`)
+  const machine: Machine = {
+    ...baseMachine(id, 'generator'),
+    // Generators draw no power, and scale linearly with clock.
+    powerMw: 0,
+    powerExponent: 1,
+    ports: { belt: { in: extra.belt[0], out: extra.belt[1] }, pipe: { in: extra.pipe[0], out: extra.pipe[1] } },
+    generation: { powerMw: gen.powerProduction },
+  }
+  machines.push(machine)
+  for (const fuel of gen.fuel) {
+    const energy = data.items[fuel]?.energyValue
+    if (!energy) throw new Error(`Fuel ${fuel} of ${id} has no energy value`)
+    const durationSec = energy / gen.powerProduction
+    const water = (gen.waterToPowerRatio * gen.powerProduction * durationSec) / 1000
+    const waste = FUEL_WASTE[fuel]
+    recipes.push({
+      id: `Recipe_${shortName(id)}_${shortName(fuel)}_C`,
+      name: `${machine.name} (${data.items[fuel].name})`,
+      machines: [id],
+      durationSec,
+      inputs: [{ item: fuel, amount: 1 }, ...(water > 0 ? [{ item: WATER, amount: water }] : [])],
+      outputs: waste ? [waste] : [],
+      alternate: false,
+    })
+  }
+}
+recipes.sort(byId)
 machines.sort(byId)
 
 // Items referenced by recipes or extractable.
@@ -111,6 +161,7 @@ const items: Item[] = [...usedItems]
       ...(form !== 'solid' ? { color: hex(it.fluidColor) } : {}),
       ...(form === 'solid' && it.sinkPoints ? { sinkPoints: it.sinkPoints } : {}),
       ...(it.energyValue ? { energyMJ: it.energyValue } : {}),
+      ...(it.radioactiveDecay ? { radioactive: true } : {}),
     }
   })
   .sort(byId)

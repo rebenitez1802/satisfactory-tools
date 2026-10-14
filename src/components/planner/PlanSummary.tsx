@@ -27,6 +27,8 @@ export function PlanSummary({
   onEdgeStyle: (style: EdgeStyle) => void
 }) {
   const { totals } = result
+  const net = totals.generatedMw - totals.powerMw
+  const hasGenerators = plan.nodes.some((n) => n.kind === 'recipe' && catalog.machines.get(n.machine)?.generation)
   const whole = plan.settings.machineMode === 'underclock'
   const bottlenecks = plan.nodes.filter((n) => result.nodes.get(n.id)?.bottleneck)
   const buildingCount = [...totals.machines.values()].reduce((s, c) => s + Math.ceil(c - 1e-6), 0)
@@ -45,11 +47,26 @@ export function PlanSummary({
         🎯 targets on goals, ⛔ limits on sources or machine groups; everything else sizes itself.
       </p>
 
-      <div className="stats">
+      <div className={`stats${hasGenerators ? ' pn-stats-power' : ''}`}>
         <div className="stat">
           <span className="stat-value">{mw(totals.powerMw)}</span>
-          <span className="stat-label">power</span>
+          <span className="stat-label">{hasGenerators ? 'power used' : 'power'}</span>
         </div>
+        {hasGenerators && (
+          <div className="stat">
+            <span className="stat-value pn-power-made">{mw(totals.generatedMw)}</span>
+            <span className="stat-label">power made</span>
+          </div>
+        )}
+        {hasGenerators && (
+          <div className="stat">
+            <span className={`stat-value ${net < -1e-6 ? 'pn-bad' : 'pn-good'}`}>
+              {net > 1e-6 ? '+' : ''}
+              {mw(net)}
+            </span>
+            <span className="stat-label">{net < -1e-6 ? 'net · short' : 'net · spare'}</span>
+          </div>
+        )}
         <div className="stat">
           <span className="stat-value">{buildingCount}</span>
           <span className="stat-label">buildings</span>
@@ -60,6 +77,19 @@ export function PlanSummary({
         {result.goals.map((g) => {
           const item = catalog.items.get(g.item)
           const short = g.requested !== 'max' && g.achieved < g.requested - 1e-6
+          if (g.power) {
+            const node = plan.nodes.find((n) => n.id === g.id)!
+            const m = node.kind === 'recipe' ? catalog.machines.get(node.machine) : undefined
+            return (
+              <Row key={g.id} icon={m && <Icon of={m} size={20} />} label={nodeLabel(node, catalog)}>
+                <span className={short ? 'pn-bad' : 'pn-good'}>
+                  {mw(g.achieved)}
+                  {g.requested === 'max' ? ' (max)' : ` / ${mw(g.requested)}`}
+                  {short && ` · ${pct(g.achieved / (g.requested as number))}`}
+                </span>
+              </Row>
+            )
+          }
           return (
             <Row key={g.id} icon={item && <Icon of={item} size={20} />} label={`${item?.name ?? g.item}${g.openEndOf ? ' (open end)' : ''}`}>
               <span className={short ? 'pn-bad' : 'pn-good'}>

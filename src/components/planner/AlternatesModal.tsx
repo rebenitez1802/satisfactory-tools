@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Catalog } from '../../catalog'
+import { recipeItem } from '../../planner'
 import { Icon } from './Icon'
 
 /** Pick which alternate recipes you've unlocked; locked ones are hidden from pickers. */
@@ -19,7 +20,7 @@ export function AlternatesModal({
     () =>
       [...catalog.recipes.values()]
         .filter((r) => r.alternate)
-        .map((r) => ({ r, product: catalog.items.get(r.outputs[0].item) }))
+        .map((r) => ({ r, product: catalog.items.get(recipeItem(catalog, r) ?? '') }))
         .sort((a, b) => (a.product?.name ?? '').localeCompare(b.product?.name ?? '') || a.r.name.localeCompare(b.r.name)),
     [catalog],
   )

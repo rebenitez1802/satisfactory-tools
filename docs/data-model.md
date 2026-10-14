@@ -19,7 +19,14 @@ scripts/                           build-time importers (not shipped)
 1. **Catalog**, static game content (`src/catalog/types.ts`).
    - `Item`: has a form (`solid` / `liquid` / `gas`; fluids in m³).
    - `Machine`: power, clock limits, Somersloop slots, ports, and an optional
-     `extraction` spec for miners and extractors.
+     `extraction` spec for miners and extractors, or `generation` (MW made)
+     for generators.
+   - Generators run recipes like any machine: one per fuel. A cycle burns one
+     unit of fuel (1 item, or 1 m³ of a fluid fuel) for `energyMJ / MW`
+     seconds; water and waste are per cycle. Generator recipes may have no
+     outputs, and all their outputs count as byproducts.
+   - `Item.radioactive` marks uranium, waste and fuel rods. Radioactive
+     surplus that can't be sunk (no `sinkPoints`) is flagged by the solver.
    - `Recipe`: inputs and outputs per cycle, duration, the machines that can
      run it, and an alternate flag.
    - `Purity` and `TransportTier`.
@@ -33,7 +40,8 @@ scripts/                           build-time importers (not shipped)
    - `supply`: items coming in from outside.
    - `goal`: items the plan should deliver.
 
-   Goals carry a 🎯 target (a number or `max`). Any other node can be ⛔
+   Goals carry a 🎯 target (a number or `max`); so do generator groups, as
+   `power` in MW. Any other node can be ⛔
    `limited`; everything else is sized by `solvePlan` (`src/planner/solve.ts`).
    See [production-planner.md](production-planner.md) for the rules. Edges
    carry one item. A plan references catalog content by id only and records
@@ -49,8 +57,11 @@ scripts/                           build-time importers (not shipped)
    - `machineSetup` switches between fractional counts and whole machines
      (underclocked, or overclocked onto a fixed count, including the shards
      needed).
-   - Not modelled yet: the 1.2 cost multipliers, generators, and world node
-     limits.
+   - Generators are linear: N machines' worth at 100% make N × their MW and
+     burn N × the fuel, at any clock.
+   - Not modelled yet: the 1.2 cost multipliers and world node limits.
+     Geothermal generators are left out on purpose: no production chain
+     feeds them.
 
 ## Ids and packs
 
@@ -77,6 +88,7 @@ npm run data:base   # scripts/import-base.ts + scripts/fetch-icons.ts
   game's 1.2 data.
 - Values greeny lacks are hand-written in `scripts/base-overlay.ts`: ports,
   Somersloop slots, purities, belt and pipe tiers, the Water Extractor,
-  resource wells and gas forms.
+  resource wells, gas forms, generator ports, and the waste each nuclear fuel
+  rod leaves (greeny lists generators' fuels and water but not their waste).
 - Icons come from satisfactory.wiki.gg. They are © Coffee Stain Studios and
   credited in the site footer.
