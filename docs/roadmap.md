@@ -468,13 +468,18 @@ on 2026-10-14. **Effort:** S–M.
   - A "Build cost" section in the summary: total items for the buildings
     the plan needs, counted whole (`ceil` per group, like the Buildings
     section), next to the power shards and Somersloops already listed.
-  - With #21: also "still to build", the cost of the nodes not marked done.
+  - **With #21, the checklist drives what's left:** the section shows the
+    total and **still needed**, which leaves out every node marked done.
+    Marking a node done takes its buildings' cost off "still needed" right
+    away, and unmarking puts it back. A done node that now needs more
+    machines (done with 6, now needs 8) still counts the 2 extra.
   - Maybe later: belts and pipes (their length isn't known), and splitters
     and mergers counted from the ⑂ / ⑃ badges.
 - **Implementation:** a pure `buildCost(plan, result, catalog)` in
   `src/planner/`, from `result.totals.machines` or per node.
 - **Done when:** the Modular Frame chain from #2 shows its cost, and the
-  numbers match the wiki for a couple of buildings.
+  numbers match the wiki for a couple of buildings. Once #21 is in, marking
+  nodes done lowers "still needed" by exactly their cost.
 - **Tests:** importer output for a few machines (Constructor, Miner Mk.3,
   Nuclear Power Plant), and unit tests for `buildCost`.
 
@@ -490,8 +495,8 @@ across several sessions. Asked for by the user on 2026-10-14. **Effort:** S.
 - **UX:**
   - A ✓ toggle on the card (a corner badge) and in the inspector. Done cards
     get a green check and fade a little, so what's left stands out.
-  - The summary shows progress, e.g. "12 of 30 nodes done", and with #20
-    the cost of what isn't done yet.
+  - The summary shows progress, e.g. "12 of 30 nodes done". With #20, the
+    build cost's "still needed" leaves out done nodes (see #20).
   - Maybe a "show what's left" view that dims everything done.
 - **Nice to have: a warning when the plan changes.** If a node was marked
   done with 6 machines and an edit later needs 8, the card warns "done with
