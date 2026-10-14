@@ -90,3 +90,26 @@ export const EXTRACTORS: Record<string, ExtractorExtra> = {
 
 /** Machines that exist only to power other extractors. */
 export const SUPPORT_MACHINES = ['Build_FrackingSmasher_C']
+
+/**
+ * Generators: port counts (in, out). greeny lists their power, fuels and water
+ * use under `generators`; the Biomass Burner here is the standalone one (the
+ * HUB's burner can't take belts).
+ */
+export const GENERATORS: Record<string, { belt: [number, number]; pipe: [number, number] }> = {
+  Build_GeneratorBiomass_Automated_C: { belt: [1, 0], pipe: [0, 0] },
+  Build_GeneratorCoal_C: { belt: [1, 0], pipe: [1, 0] },
+  Build_GeneratorFuel_C: { belt: [0, 0], pipe: [1, 0] },
+  Build_GeneratorNuclear_C: { belt: [1, 1], pipe: [1, 0] },
+}
+
+/**
+ * Waste left by one unit of fuel, which greeny doesn't carry. From
+ * satisfactory.wiki.gg (Nuclear Power Plant): a uranium rod burns 300 s and
+ * leaves 10 waste/min, a plutonium rod burns 600 s and leaves 1/min, and a
+ * Ficsonium rod leaves none.
+ */
+export const FUEL_WASTE: Record<string, { item: string; amount: number }> = {
+  Desc_NuclearFuelRod_C: { item: 'Desc_NuclearWaste_C', amount: 50 },
+  Desc_PlutoniumFuelRod_C: { item: 'Desc_PlutoniumWaste_C', amount: 10 },
+}

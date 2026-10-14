@@ -25,6 +25,7 @@ export interface GreenyData {
       liquid: boolean
       sinkPoints: number
       energyValue: number
+      radioactiveDecay: number
       fluidColor: { r: number; g: number; b: number; a: number }
     }
   >
@@ -51,6 +52,17 @@ export interface GreenyData {
       className: string
       name: string
       metadata: { powerConsumption?: number; powerConsumptionExponent?: number; manufacturingSpeed?: number }
+    }
+  >
+  generators: Record<
+    string,
+    {
+      className: string
+      fuel: string[]
+      /** MW at 100% clock. */
+      powerProduction: number
+      /** Water in m³ per MJ × 1000 (0 for generators that need none). */
+      waterToPowerRatio: number
     }
   >
   miners: Record<

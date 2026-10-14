@@ -2,7 +2,7 @@
 // drops belts whose item the node no longer has, removing nodes takes their
 // belts along, and so on. All pure: they return a new plan.
 
-import type { Catalog, ItemId } from '../catalog'
+import type { Catalog, ItemId, Machine, Recipe } from '../catalog'
 import type { Plan, PlanEdge, PlanNode } from './types'
 
 /** Items a node consumes and produces, or undefined if its content isn't loaded. */
@@ -144,9 +144,27 @@ export function duplicateNodes(plan: Plan, ids: Iterable<string>, newId: () => s
   return pasteClip(plan, copyNodes(plan, ids), newId).plan
 }
 
-/** Recipes that make the same main product as `recipeId` (for switching to an alternate). */
+/** The generator a recipe runs in, if it makes power. */
+export function generatorOf(catalog: Catalog, recipe: Recipe): Machine | undefined {
+  const machine = catalog.machines.get(recipe.machines[0])
+  return machine?.generation ? machine : undefined
+}
+
+/** The item a recipe is shown by: its main product, or a generator's fuel. */
+export function recipeItem(catalog: Catalog, recipe: Recipe): ItemId | undefined {
+  return (generatorOf(catalog, recipe) ? recipe.inputs[0] : recipe.outputs[0])?.item
+}
+
+/**
+ * Recipes that make the same main product as `recipeId` (for switching to an
+ * alternate). For a generator: the other fuels it burns.
+ */
 export function sameProductRecipes(catalog: Catalog, recipeId: string): string[] {
-  const product = catalog.recipes.get(recipeId)?.outputs[0]?.item
+  const recipe = catalog.recipes.get(recipeId)
+  if (!recipe) return []
+  const gen = generatorOf(catalog, recipe)
+  if (gen) return [...catalog.recipes.values()].filter((r) => r.machines.includes(gen.id)).map((r) => r.id)
+  const product = recipe.outputs[0]?.item
   if (!product) return []
   return (catalog.recipesProducing.get(product) ?? []).filter((id) => catalog.recipes.get(id)!.outputs[0].item === product)
 }

@@ -36,7 +36,13 @@ describe('picker options', () => {
     expect(searchOptions(resourceOptions(catalog), catalog, 'iron').map(label)).toHaveLength(3)
     expect(searchOptions(resourceOptions(catalog), catalog, 'iron mk.2').map(label)).toEqual(['extractor:Miner Mk.2'])
     expect(searchOptions(resourceOptions(catalog), catalog, 'copper mk3').map(label)).toEqual(['extractor:Miner Mk.3'])
-    expect(goalOptions(catalog)).toHaveLength(catalog.items.size)
+    // Generators come first: they are power goals.
+    const goals = goalOptions(catalog)
+    expect(goals).toHaveLength(17 + catalog.items.size)
+    expect(goals.slice(0, 17).every((o) => o.kind === 'recipe' && catalog.machines.get(o.recipe.machines[0])?.generation)).toBe(true)
+    expect(goals.slice(17).every((o) => o.kind === 'goal')).toBe(true)
+    expect(label(goals[0])).toMatch(/^Nuclear Power Plant/)
+    expect(label(goals[16])).toMatch(/^Biomass Burner/)
   })
 
   it('palette finds items and recipes', () => {
@@ -65,6 +71,14 @@ describe('createNode defaults', () => {
   it('palette sources are limits, goals are numbers', () => {
     expect(createNode({ kind: 'supply', item: ore }, 'c', at, 'palette', catalog)).toMatchObject({ limited: true, perMin: 60 })
     expect(createNode({ kind: 'goal', item: ore }, 'd', at, 'palette', catalog)).toMatchObject({ target: 60 })
+  })
+
+  it('generators take a power target from the palette, Max from a fuel output', () => {
+    const recipe = catalog.recipes.get('base:Recipe_GeneratorCoal_Coal_C')!
+    expect(createNode({ kind: 'recipe', recipe }, 'g', at, 'palette', catalog)).toMatchObject({ power: 75 })
+    expect(createNode({ kind: 'recipe', recipe }, 'h', at, 'consumer', catalog)).toMatchObject({ power: 'max' })
+    expect(createNode({ kind: 'recipe', recipe: catalog.recipes.get('base:Recipe_IronPlate_C')! }, 'i', at, 'palette', catalog)).not.toHaveProperty('power')
+    expect(consumersOf(catalog, 'base:Desc_Coal_C').map((o) => (o.kind === 'recipe' ? o.recipe.id : o.kind))).toContain(recipe.id)
   })
 
   it('recipes use their first machine', () => {

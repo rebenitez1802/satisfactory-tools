@@ -373,6 +373,7 @@
     "id": "Desc_Ficsonium_C",
     "name": "Ficsonium",
     "form": "solid",
+    "radioactive": true,
     "icon": "icons/Desc_Ficsonium_C.png"
    },
    {
@@ -380,6 +381,7 @@
     "name": "Ficsonium Fuel Rod",
     "form": "solid",
     "energyMJ": 150000,
+    "radioactive": true,
     "icon": "icons/Desc_FicsoniumFuelRod_C.png"
    },
    {
@@ -667,6 +669,7 @@
     "id": "Desc_NonFissibleUranium_C",
     "name": "Non-Fissile Uranium",
     "form": "solid",
+    "radioactive": true,
     "icon": "icons/Desc_NonFissibleUranium_C.png"
    },
    {
@@ -675,12 +678,14 @@
     "form": "solid",
     "sinkPoints": 43468,
     "energyMJ": 750000,
+    "radioactive": true,
     "icon": "icons/Desc_NuclearFuelRod_C.png"
    },
    {
     "id": "Desc_NuclearWaste_C",
     "name": "Uranium Waste",
     "form": "solid",
+    "radioactive": true,
     "icon": "icons/Desc_NuclearWaste_C.png"
    },
    {
@@ -716,6 +721,7 @@
     "name": "Uranium",
     "form": "solid",
     "sinkPoints": 35,
+    "radioactive": true,
     "icon": "icons/Desc_OreUranium_C.png"
    },
    {
@@ -812,6 +818,7 @@
     "id": "Desc_PlutoniumCell_C",
     "name": "Encased Plutonium Cell",
     "form": "solid",
+    "radioactive": true,
     "icon": "icons/Desc_PlutoniumCell_C.png"
    },
    {
@@ -820,18 +827,21 @@
     "form": "solid",
     "sinkPoints": 153184,
     "energyMJ": 1500000,
+    "radioactive": true,
     "icon": "icons/Desc_PlutoniumFuelRod_C.png"
    },
    {
     "id": "Desc_PlutoniumPellet_C",
     "name": "Plutonium Pellet",
     "form": "solid",
+    "radioactive": true,
     "icon": "icons/Desc_PlutoniumPellet_C.png"
    },
    {
     "id": "Desc_PlutoniumWaste_C",
     "name": "Plutonium Waste",
     "form": "solid",
+    "radioactive": true,
     "icon": "icons/Desc_PlutoniumWaste_C.png"
    },
    {
@@ -1140,6 +1150,7 @@
     "name": "Encased Uranium Cell",
     "form": "solid",
     "sinkPoints": 147,
+    "radioactive": true,
     "icon": "icons/Desc_UraniumCell_C.png"
    },
    {
@@ -1393,6 +1404,122 @@
      "item": "Desc_CrystalShard_C"
     },
     "icon": "icons/Build_FrackingSmasher_C.png"
+   },
+   {
+    "id": "Build_GeneratorBiomass_Automated_C",
+    "name": "Biomass Burner",
+    "category": "generator",
+    "powerMw": 0,
+    "powerExponent": 1,
+    "speed": 1,
+    "ports": {
+     "belt": {
+      "in": 1,
+      "out": 0
+     },
+     "pipe": {
+      "in": 0,
+      "out": 0
+     }
+    },
+    "overclock": {
+     "min": 0.01,
+     "baseMax": 1,
+     "shardSlots": 3,
+     "perShard": 0.5,
+     "item": "Desc_CrystalShard_C"
+    },
+    "generation": {
+     "powerMw": 30
+    },
+    "icon": "icons/Build_GeneratorBiomass_Automated_C.png"
+   },
+   {
+    "id": "Build_GeneratorCoal_C",
+    "name": "Coal-Powered Generator",
+    "category": "generator",
+    "powerMw": 0,
+    "powerExponent": 1,
+    "speed": 1,
+    "ports": {
+     "belt": {
+      "in": 1,
+      "out": 0
+     },
+     "pipe": {
+      "in": 1,
+      "out": 0
+     }
+    },
+    "overclock": {
+     "min": 0.01,
+     "baseMax": 1,
+     "shardSlots": 3,
+     "perShard": 0.5,
+     "item": "Desc_CrystalShard_C"
+    },
+    "generation": {
+     "powerMw": 75
+    },
+    "icon": "icons/Build_GeneratorCoal_C.png"
+   },
+   {
+    "id": "Build_GeneratorFuel_C",
+    "name": "Fuel-Powered Generator",
+    "category": "generator",
+    "powerMw": 0,
+    "powerExponent": 1,
+    "speed": 1,
+    "ports": {
+     "belt": {
+      "in": 0,
+      "out": 0
+     },
+     "pipe": {
+      "in": 1,
+      "out": 0
+     }
+    },
+    "overclock": {
+     "min": 0.01,
+     "baseMax": 1,
+     "shardSlots": 3,
+     "perShard": 0.5,
+     "item": "Desc_CrystalShard_C"
+    },
+    "generation": {
+     "powerMw": 250
+    },
+    "icon": "icons/Build_GeneratorFuel_C.png"
+   },
+   {
+    "id": "Build_GeneratorNuclear_C",
+    "name": "Nuclear Power Plant",
+    "category": "generator",
+    "powerMw": 0,
+    "powerExponent": 1,
+    "speed": 1,
+    "ports": {
+     "belt": {
+      "in": 1,
+      "out": 1
+     },
+     "pipe": {
+      "in": 1,
+      "out": 0
+     }
+    },
+    "overclock": {
+     "min": 0.01,
+     "baseMax": 1,
+     "shardSlots": 3,
+     "perShard": 0.5,
+     "item": "Desc_CrystalShard_C"
+    },
+    "generation": {
+     "powerMw": 2500
+    },
+    "icon": "icons/Build_GeneratorNuclear_C.png"
    },
    {
     "id": "Build_HadronCollider_C",
@@ -6072,6 +6199,312 @@
      {
       "item": "Desc_GasTank_C",
       "amount": 1
+     }
+    ],
+    "alternate": false
+   },
+   {
+    "id": "Recipe_GeneratorBiomass_Automated_Biofuel_C",
+    "name": "Biomass Burner (Solid Biofuel)",
+    "machines": [
+     "Build_GeneratorBiomass_Automated_C"
+    ],
+    "durationSec": 15,
+    "inputs": [
+     {
+      "item": "Desc_Biofuel_C",
+      "amount": 1
+     }
+    ],
+    "outputs": [],
+    "alternate": false
+   },
+   {
+    "id": "Recipe_GeneratorBiomass_Automated_GenericBiomass_C",
+    "name": "Biomass Burner (Biomass)",
+    "machines": [
+     "Build_GeneratorBiomass_Automated_C"
+    ],
+    "durationSec": 6,
+    "inputs": [
+     {
+      "item": "Desc_GenericBiomass_C",
+      "amount": 1
+     }
+    ],
+    "outputs": [],
+    "alternate": false
+   },
+   {
+    "id": "Recipe_GeneratorBiomass_Automated_Leaves_C",
+    "name": "Biomass Burner (Leaves)",
+    "machines": [
+     "Build_GeneratorBiomass_Automated_C"
+    ],
+    "durationSec": 0.5,
+    "inputs": [
+     {
+      "item": "Desc_Leaves_C",
+      "amount": 1
+     }
+    ],
+    "outputs": [],
+    "alternate": false
+   },
+   {
+    "id": "Recipe_GeneratorBiomass_Automated_Mycelia_C",
+    "name": "Biomass Burner (Mycelia)",
+    "machines": [
+     "Build_GeneratorBiomass_Automated_C"
+    ],
+    "durationSec": 0.6666666666666666,
+    "inputs": [
+     {
+      "item": "Desc_Mycelia_C",
+      "amount": 1
+     }
+    ],
+    "outputs": [],
+    "alternate": false
+   },
+   {
+    "id": "Recipe_GeneratorBiomass_Automated_PackagedBiofuel_C",
+    "name": "Biomass Burner (Packaged Liquid Biofuel)",
+    "machines": [
+     "Build_GeneratorBiomass_Automated_C"
+    ],
+    "durationSec": 25,
+    "inputs": [
+     {
+      "item": "Desc_PackagedBiofuel_C",
+      "amount": 1
+     }
+    ],
+    "outputs": [],
+    "alternate": false
+   },
+   {
+    "id": "Recipe_GeneratorBiomass_Automated_Wood_C",
+    "name": "Biomass Burner (Wood)",
+    "machines": [
+     "Build_GeneratorBiomass_Automated_C"
+    ],
+    "durationSec": 3.3333333333333335,
+    "inputs": [
+     {
+      "item": "Desc_Wood_C",
+      "amount": 1
+     }
+    ],
+    "outputs": [],
+    "alternate": false
+   },
+   {
+    "id": "Recipe_GeneratorCoal_Coal_C",
+    "name": "Coal-Powered Generator (Coal)",
+    "machines": [
+     "Build_GeneratorCoal_C"
+    ],
+    "durationSec": 4,
+    "inputs": [
+     {
+      "item": "Desc_Coal_C",
+      "amount": 1
+     },
+     {
+      "item": "Desc_Water_C",
+      "amount": 3
+     }
+    ],
+    "outputs": [],
+    "alternate": false
+   },
+   {
+    "id": "Recipe_GeneratorCoal_CompactedCoal_C",
+    "name": "Coal-Powered Generator (Compacted Coal)",
+    "machines": [
+     "Build_GeneratorCoal_C"
+    ],
+    "durationSec": 8.4,
+    "inputs": [
+     {
+      "item": "Desc_CompactedCoal_C",
+      "amount": 1
+     },
+     {
+      "item": "Desc_Water_C",
+      "amount": 6.3
+     }
+    ],
+    "outputs": [],
+    "alternate": false
+   },
+   {
+    "id": "Recipe_GeneratorCoal_PetroleumCoke_C",
+    "name": "Coal-Powered Generator (Petroleum Coke)",
+    "machines": [
+     "Build_GeneratorCoal_C"
+    ],
+    "durationSec": 2.4,
+    "inputs": [
+     {
+      "item": "Desc_PetroleumCoke_C",
+      "amount": 1
+     },
+     {
+      "item": "Desc_Water_C",
+      "amount": 1.8
+     }
+    ],
+    "outputs": [],
+    "alternate": false
+   },
+   {
+    "id": "Recipe_GeneratorFuel_IonizedFuel_C",
+    "name": "Fuel-Powered Generator (Ionized Fuel)",
+    "machines": [
+     "Build_GeneratorFuel_C"
+    ],
+    "durationSec": 20,
+    "inputs": [
+     {
+      "item": "Desc_IonizedFuel_C",
+      "amount": 1
+     }
+    ],
+    "outputs": [],
+    "alternate": false
+   },
+   {
+    "id": "Recipe_GeneratorFuel_LiquidBiofuel_C",
+    "name": "Fuel-Powered Generator (Liquid Biofuel)",
+    "machines": [
+     "Build_GeneratorFuel_C"
+    ],
+    "durationSec": 3,
+    "inputs": [
+     {
+      "item": "Desc_LiquidBiofuel_C",
+      "amount": 1
+     }
+    ],
+    "outputs": [],
+    "alternate": false
+   },
+   {
+    "id": "Recipe_GeneratorFuel_LiquidFuel_C",
+    "name": "Fuel-Powered Generator (Fuel)",
+    "machines": [
+     "Build_GeneratorFuel_C"
+    ],
+    "durationSec": 3,
+    "inputs": [
+     {
+      "item": "Desc_LiquidFuel_C",
+      "amount": 1
+     }
+    ],
+    "outputs": [],
+    "alternate": false
+   },
+   {
+    "id": "Recipe_GeneratorFuel_LiquidTurboFuel_C",
+    "name": "Fuel-Powered Generator (Turbofuel)",
+    "machines": [
+     "Build_GeneratorFuel_C"
+    ],
+    "durationSec": 8,
+    "inputs": [
+     {
+      "item": "Desc_LiquidTurboFuel_C",
+      "amount": 1
+     }
+    ],
+    "outputs": [],
+    "alternate": false
+   },
+   {
+    "id": "Recipe_GeneratorFuel_RocketFuel_C",
+    "name": "Fuel-Powered Generator (Rocket Fuel)",
+    "machines": [
+     "Build_GeneratorFuel_C"
+    ],
+    "durationSec": 14.4,
+    "inputs": [
+     {
+      "item": "Desc_RocketFuel_C",
+      "amount": 1
+     }
+    ],
+    "outputs": [],
+    "alternate": false
+   },
+   {
+    "id": "Recipe_GeneratorNuclear_FicsoniumFuelRod_C",
+    "name": "Nuclear Power Plant (Ficsonium Fuel Rod)",
+    "machines": [
+     "Build_GeneratorNuclear_C"
+    ],
+    "durationSec": 60,
+    "inputs": [
+     {
+      "item": "Desc_FicsoniumFuelRod_C",
+      "amount": 1
+     },
+     {
+      "item": "Desc_Water_C",
+      "amount": 240
+     }
+    ],
+    "outputs": [],
+    "alternate": false
+   },
+   {
+    "id": "Recipe_GeneratorNuclear_NuclearFuelRod_C",
+    "name": "Nuclear Power Plant (Uranium Fuel Rod)",
+    "machines": [
+     "Build_GeneratorNuclear_C"
+    ],
+    "durationSec": 300,
+    "inputs": [
+     {
+      "item": "Desc_NuclearFuelRod_C",
+      "amount": 1
+     },
+     {
+      "item": "Desc_Water_C",
+      "amount": 1200
+     }
+    ],
+    "outputs": [
+     {
+      "item": "Desc_NuclearWaste_C",
+      "amount": 50
+     }
+    ],
+    "alternate": false
+   },
+   {
+    "id": "Recipe_GeneratorNuclear_PlutoniumFuelRod_C",
+    "name": "Nuclear Power Plant (Plutonium Fuel Rod)",
+    "machines": [
+     "Build_GeneratorNuclear_C"
+    ],
+    "durationSec": 600,
+    "inputs": [
+     {
+      "item": "Desc_PlutoniumFuelRod_C",
+      "amount": 1
+     },
+     {
+      "item": "Desc_Water_C",
+      "amount": 2400
+     }
+    ],
+    "outputs": [
+     {
+      "item": "Desc_PlutoniumWaste_C",
+      "amount": 10
      }
     ],
     "alternate": false

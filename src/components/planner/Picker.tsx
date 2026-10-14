@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Catalog } from '../../catalog'
-import { paletteOptions, searchOptions, type PickOption } from '../../planner'
+import { paletteOptions, recipeItem, searchOptions, type PickOption } from '../../planner'
 import { fmt } from './format'
 import { Icon } from './Icon'
 import { RecipeIO } from './RecipeIO'
@@ -109,7 +109,7 @@ function OptionRow({ option: o, catalog }: { option: PickOption; catalog: Catalo
   switch (o.kind) {
     case 'recipe': {
       const r = o.recipe
-      const product = catalog.items.get(r.outputs[0].item)
+      const product = catalog.items.get(recipeItem(catalog, r) ?? '')
       return (
         <>
           {product && <Icon of={product} size={28} />}

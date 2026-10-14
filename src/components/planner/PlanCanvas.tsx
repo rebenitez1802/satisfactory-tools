@@ -435,7 +435,7 @@ export function PlanCanvas({
   const pickerTitle = (() => {
     if (!picker) return ''
     if (picker.preset === 'resources') return 'Add a resource you have (e.g. "iron mk.2")'
-    if (picker.preset === 'goals') return 'Add a product you want'
+    if (picker.preset === 'goals') return 'Add a product you want, or power to make'
     if (!picker.anchor) return 'Add to plan'
     const item = catalog.items.get(picker.anchor.item)?.name ?? 'item'
     const node = plan.nodes.find((n) => n.id === picker.anchor!.node)

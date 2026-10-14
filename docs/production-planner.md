@@ -31,6 +31,7 @@ merged behind your back.
 | `extractor` | miners/extractors on resource nodes, by purity | may be ⛔ limited ("these nodes are what I have") |
 | `supply` | items arriving from outside the plan | may be ⛔ limited ("I get 90/min") |
 | `goal` | what the plan should deliver | 🎯 target: a number, or **Max** |
+| `recipe` on a generator | generators burning one fuel | 🎯 power target in MW, or **Max**; may also be ⛔ limited |
 
 Edges are belts or pipes you draw, carrying one item from an output port to
 an input port of the same item. Connections are explicit; nothing is wired up
@@ -75,10 +76,74 @@ Examples, using Iron Ore → Ingot → Plate:
 
 Known v1 simplifications (Option 3 lifts them):
 - Demand on an input with several producers is split by edge **share**
-  (default: equal).
+  (default: equal), except that spare byproducts are used first (below).
 - Several numeric goals behind one bottleneck are scaled together; several
   Max goals share the limits evenly (each uses the same fraction of them).
-- A chain driven only by a byproduct with no goal downstream gets no flow.
+
+## Generators and power
+
+Generators are machines that run one recipe per fuel: the Nuclear Power
+Plant has *Uranium Fuel Rod*, *Plutonium Fuel Rod* and *Ficsonium Fuel Rod*
+recipes, the Coal-Powered Generator has coal, compacted coal and petroleum
+coke, and so on. Each recipe takes the fuel (plus water where needed) and
+outputs any waste. Geothermal generators are left out on purpose: no production chain feeds
+them.
+
+- A generator group is an **anchor**, like a goal:
+  - **🎯 Target** in MW: the fuel chain upstream sizes itself to make that
+    much power. Limits upstream can scale it down, as with goals.
+  - **Max**: burn all the fuel the limits upstream allow.
+  - **On demand** (no anchor): sized like any machine group, by demand for
+    its waste. "How many uranium plants feed 2 plutonium plants?" works this
+    way.
+  - ⛔ limiting the machine count caps it, as with any machine group.
+- Generators scale **linearly** with clock: N machines' worth at 100% make
+  N × their MW and burn N × the fuel, whatever the clock.
+- Added from "+ Goal" or the palette, a generator starts with a target of one
+  machine's power; added from a fuel output, it starts on Max.
+- The summary shows **power used**, **power made** and the **net** (spare or
+  short).
+
+| Generator | MW | Fuel per machine | Water | Waste |
+|---|---|---|---|---|
+| Nuclear, uranium rods | 2500 | 0.2 rods/min | 240 m³/min | 10 Uranium Waste/min |
+| Nuclear, plutonium rods | 2500 | 0.1 rods/min | 240 m³/min | 1 Plutonium Waste/min |
+| Nuclear, Ficsonium rods | 2500 | 1 rod/min | 240 m³/min | none |
+| Coal-Powered, coal | 75 | 15/min | 45 m³/min | — |
+| Fuel-Powered, fuel | 250 | 20 m³/min | — | — |
+
+Waste that is left over and can't be sunk (radioactive items without sink
+points) is reported as a warning: in the game the plants stop when it backs
+up. A fully closed nuclear chain runs **4 uranium : 2 plutonium : 1
+Ficsonium** plants with no waste left.
+
+## Byproducts
+
+A node is sized by the output it is run for; its other outputs are
+byproducts (a recipe's second output, or all of a generator's outputs).
+
+- **Spare byproducts flow on.** When a byproduct's maker has an anchor in its
+  own part of the plan (a goal or a powered generator upstream of it, or the
+  maker itself), the belts carrying that byproduct get **what is spare** and
+  no more:
+  - A chain fed only by the byproduct fills from it by itself, through the
+    open-end rule: Plastic 🎯20 → Heavy Oil Residue → Residual Fuel makes
+    6.7 fuel/min with no fuel goal.
+  - A Max goal or Max generator downstream gets the spare, even when the
+    sources upstream are fully used.
+  - A numeric goal that needs more than the spare **falls short**, and the
+    maker is marked as the bottleneck. The maker doesn't grow (which would
+    over-make its main product); add another producer of the byproduct.
+  - Where an input is fed by a spare byproduct and by other producers, the
+    byproduct is used first and the others make up the rest.
+- **Otherwise byproducts are pulled** like main products. A maker with
+  nothing else to run for (its main output unconnected, or no goal around
+  it) is sized by demand for its byproduct.
+- Technically the solver cuts the plan at those byproduct belts into
+  *stages*, solves them makers first, and hands each stage the spare as a
+  limited supply. Byproduct belts that loop back into their maker's own
+  chain stay pulled (e.g. Ficsonium Fuel Rod's Dark Matter Residue feeding
+  the Ficsonium that makes it).
 
 ## Presentation
 
@@ -97,8 +162,9 @@ Known v1 simplifications (Option 3 lifts them):
   badge. Clicking it opens a read-only load-balancer popup for those rates, with
   surplus as the leftover output, plus "Open in Load Balancer". Inputs fed by
   several edges get a merger badge.
-- **Summary:** total MW, buildings by type, shards and Somersloops, raw
-  resources, net outputs, surplus, missing inputs, bottlenecks.
+- **Summary:** total MW (power used; with generators, also power made and
+  the net), buildings by type, shards and Somersloops, raw resources, net
+  outputs, surplus, missing inputs, bottlenecks.
 - **Cards** are compact, in the style of Satisfactory Modeler: machine and
   count in the middle, input items on the left edge, outputs on the right.
   Details are in the hover tooltip; editing happens in the inspector.
@@ -109,7 +175,8 @@ Known v1 simplifications (Option 3 lifts them):
   **+** opens a blank plan and asks for its name; × deletes, with an Undo
   notice. Export/Import move plans as JSON.
 - **Quick start:** "⛏ + Resource" (what you have) or "🎯 + Goal" (what you
-  want); an empty plan offers both.
+  want: power plants first, biggest first, then items); an empty plan offers
+  both.
 - **Connections:** the whole item icon is the handle.
   - Drag onto a card to connect the matching port.
   - Drag onto empty canvas to pick a producer or consumer.
@@ -177,4 +244,6 @@ Known v1 limits that the roadmap addresses:
   share yet (roadmap #7).
 - An edge over its belt tier turns red instead of saying how many belts it
   needs (#4).
-- A chain fed only by a byproduct gets no flow unless it has a goal (#12).
+- Byproducts fed back into their own loop (aluminum scrap's water piped to
+  Alumina Solution, Ficsonium's Dark Matter Residue) are still pulled, and
+  the rates run away or drop to 0 (#16).

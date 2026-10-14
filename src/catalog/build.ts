@@ -243,7 +243,9 @@ function validateReferences(store: Store, diagnostics: Diagnostic[]) {
   for (const [id, r] of store.recipes) {
     const missingItems = [...r.inputs, ...r.outputs].map((a) => a.item).filter((i) => !store.items.has(i))
     const machines = r.machines.filter((m) => store.machines.has(m))
-    if (missingItems.length || machines.length === 0 || r.outputs.length === 0) {
+    // Generator recipes make power, so they may have no item outputs.
+    const makesSomething = r.outputs.length > 0 || machines.some((m) => store.machines.get(m)!.generation)
+    if (missingItems.length || machines.length === 0 || !makesSomething) {
       const why = missingItems.length
         ? `unknown items ${[...new Set(missingItems)].join(', ')}`
         : machines.length === 0

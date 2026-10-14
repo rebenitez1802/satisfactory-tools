@@ -35,6 +35,8 @@ export interface Item {
   sinkPoints?: number
   /** MJ released when burned, for fuels. */
   energyMJ?: number
+  /** Radioactive items (uranium, waste, fuel rods). Unused radioactive items that can't be sunk are flagged. */
+  radioactive?: boolean
 }
 
 /** Node purity tier. Extraction rates are multiplied by `multiplier`. */
@@ -103,6 +105,16 @@ export interface ExtractionSpec {
   poweredBy?: MachineId
 }
 
+/**
+ * A machine that burns fuel for power. Its recipes take fuel (and water) and
+ * may output waste; each recipe's duration is how long one unit of fuel burns.
+ * Generators scale linearly with clock: power and fuel use alike.
+ */
+export interface GenerationSpec {
+  /** Power produced at 100% clock, in MW. */
+  powerMw: number
+}
+
 export interface Machine {
   id: MachineId
   name: string
@@ -122,6 +134,8 @@ export interface Machine {
   amplifier?: AmplifierSpec
   /** Present on extractors. */
   extraction?: ExtractionSpec
+  /** Present on power generators. */
+  generation?: GenerationSpec
 }
 
 export interface ItemAmount {
@@ -137,7 +151,11 @@ export interface Recipe {
   machines: MachineId[]
   durationSec: number
   inputs: ItemAmount[]
-  /** outputs[0] is the main product; any others are byproducts. */
+  /**
+   * outputs[0] is the main product; any others are byproducts. Generator
+   * recipes make power, so all their outputs (waste) are byproducts, and they
+   * may have none.
+   */
   outputs: ItemAmount[]
   alternate: boolean
   /**

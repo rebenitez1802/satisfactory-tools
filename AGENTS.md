@@ -35,7 +35,10 @@ output. Every generated graph is checked by a flow simulator before it is shown.
 **Production Chains:** a production planner edited **right in the graph**
 (React Flow). Nodes are machine groups: recipes, extractors on resource nodes,
 supplies and goals. Goals carry a 🎯 target or Max, any node can be ⛔
-limited, and the solver sizes the rest (forward, backward or both). Splits
+limited, and the solver sizes the rest (forward, backward or both).
+Generators (coal, fuel, biomass, nuclear) are recipe nodes with a 🎯 MW
+target or Max; the summary shows power used, made and net. Spare byproducts
+(nuclear waste, heavy oil residue, …) flow on into the chains they feed. Splits
 open a read-only load balancer. Plans live in tabs and autosave to
 localStorage. Game data comes from **mod-ready data packs** (see "Production
 chains" below).
@@ -122,7 +125,8 @@ src/
   styles.css                Global styling (dark theme, CSS variables)
   catalog/                  Game data, framework-free: types, pack format, buildCatalog merge, icon helpers
   planner/                  Planner logic, framework-free: plan types, rates/power, solve.ts
-                            (targets & limits), create/edit/place helpers, layout.ts (Tidy, dagre)
+                            (targets & limits, byproduct stages), create/edit/place helpers,
+                            layout.ts (Tidy, dagre)
   components/planner/       Planner UI: PlannerTool (state, tabs, history), PlanCanvas (React Flow),
                             nodes.tsx (cards), Inspector, Picker, RecipeSelect, BalancerPopup, planner.css
   components/
@@ -247,8 +251,18 @@ PlannerContext { catalog, result, updateNode, openSplit, isRecipeHidden, edgeSty
   - Use the fixtures in `__tests__/fixtures.ts`: `recipeNode`,
     `extractorNode`, `goalNode`, `supplyNode`, `plan()`, and `catalog`, which
     is built from the committed `public/packs/base/pack.json`.
-  - Order of the solve: `withOpenEnds` → targets pass → scale by the tightest
-    limit → Max goals fair-share → final pass → `assemble`.
+  - Order of the solve: `splitStages` (byproduct belts cut the plan into
+    stages) → per stage, producers first: spare byproducts become limited
+    supplies → `withOpenEnds` → targets pass → scale by the tightest limit →
+    Max goals fair-share → final pass; then one `assemble` over the whole plan.
+  - "Goal-like" means `Unit.anchor` is set: goal nodes, and generator recipe
+    nodes with `power`. Use that, not `kind === 'goal'`, in solver code.
+- **Generators are recipe nodes** whose machine has `generation`. Their
+  recipes take fuel (and water) and may have **no outputs**, so don't assume
+  `recipe.outputs[0]` exists: use `recipeItem()` / `generatorOf()` from
+  `edit.ts`. Their anchor is `RecipeNode.power` (MW or `'max'`), and the
+  result has `NodeResult.generatedMw`, `totals.generatedMw` and power goals
+  (`GoalResult.power`).
 - **Game numbers come from the catalog,** never literals in UI code: machine
   power, slots, rates, belt tiers. The vanilla formulas are in
   `src/planner/rates.ts`.

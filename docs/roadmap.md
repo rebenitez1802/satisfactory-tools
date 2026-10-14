@@ -23,17 +23,37 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | — | [Rates on unconnected ports](#quick-win-rates-on-unconnected-ports) | M1 | Medium | XS | Done (PR #5) |
 | 6 | [Optimizer](#6-optimizer-mode-3) | M2 | Very high | L | Planned |
 | 7 | [Split shares on outputs](#7-split-shares-on-outputs) | M2 | Medium | S–M | Planned |
-| 8 | [Generators and net power](#8-generators-and-net-power) | M2 | Med–High | M | Planned |
+| 8 | [Generators and net power](#8-generators-and-net-power) | M2 | Med–High | M | Done (PR #6) |
 | 9 | [Share a plan as a link](#9-share-a-plan-as-a-link) | M2 | Medium | S | Planned |
+| 17 | [Use leftovers](#17-use-leftovers) | M2 | High | M | Planned, after #2 and #6 |
 | 10 | [1.2 power multiplier](#10-12-power-multiplier) | M2 | Medium | XS | Blocked on user's rules |
 | 11 | [World node limits](#11-world-node-limits) | M3 | Medium | M | Later |
-| 12 | [Byproduct-driven chains](#12-byproduct-driven-chains) | M3 | Low–Med | M | Later |
+| 12 | [Byproduct-driven chains](#12-byproduct-driven-chains) | M2 | Med–High | M | Done (PR #6) |
 | 13 | [Inspector covering cards](#13-inspector-covering-cards) | M3 | Low | S | Later |
 | 14 | [Belt line style in the balancer](#14-belt-line-style-in-the-balancer) | M3 | Low | XS | Later |
+| 15 | [Power goal](#15-power-goal) | M3 | Low | S–M | Later |
+| 16 | [Byproduct loops](#16-byproduct-loops) | M3 | High | M–L | Later, needs design |
 | — | [Mods and data tooling](#deferred-mods-and-data-tooling) | — | — | — | Deferred |
 
 When an item ships, change its status to **Done (PR #n)** and move its rules
 into `production-planner.md`.
+
+### Delivery plan
+
+Items are grouped into PRs by the code they touch and how much they risk,
+since every merge deploys. Changes to how the solver calculates rates get
+their own PR. Agreed with the user on 2026-10-14; one agent works through
+them in this order:
+
+| Order | PR | Items | Why together |
+|---|---|---|---|
+| 1 | Build chain | #2 | The largest piece; #6 and #17 reuse its node-building helpers. |
+| 2 | Refine and read | #3, #4, #13 | Small polish for reading and refining a built plan; one screenshot pass. Closes M1. |
+| 3 | Solver core | #6 (LP core), #16 | An LP solves byproduct loops exactly; isolated because it changes rates. |
+| 4 | Optimize | #6 (UI), #11 | The Optimize action; world node counts weigh "fewest raw resources". |
+| 5 | Use leftovers | #17 | Builds on #2 (adding nodes) and #6 (ranking suggestions). |
+| any time | Small standalones | #9, #15, #14 | Independent; slot one in between the big ones. |
+| blocked | — | #10 | Waits on the user's rules. |
 
 ---
 
@@ -276,6 +296,13 @@ rods") without numeric goals. **Effort:** S–M.
 
 ### 8. Generators and net power
 
+**Status:** done; the rules are in
+[production-planner.md](production-planner.md#generators-and-power). Coal,
+fuel, biomass and nuclear generators are recipe nodes with a 🎯 MW target,
+Max, or on demand; the summary shows power used, made and net. Left: a
+plan-wide power goal (#15). Geothermal is out of scope: no production chain
+feeds it, so it adds nothing to plan (agreed 2026-10-14). The original notes:
+
 **Value:** power is the next thing players plan, and nuclear waste chains
 come with it. **Effort:** M.
 
@@ -297,7 +324,7 @@ come with it. **Effort:** M.
   - Generators scale **linearly** with clock, not with the 1.32 power curve.
     Generator machines need their own power-exponent semantics.
   - Geothermal needs no fuel: 100/200/400 MW on impure/normal/pure geysers.
-    Model it as an extractor-like node, or defer it.
+    Out of scope: no production chain feeds it.
 - **UX:**
   - Generator nodes look like recipe cards with a ⚡ output.
   - The summary shows **generated vs consumed MW, and the net**.
@@ -316,6 +343,47 @@ come with it. **Effort:** M.
 - Add a "Copy link" button to the plan menu.
 - Plans with dozens of nodes should stay under about 8 KB. Positions can be
   rounded to integers.
+
+### 17. Use leftovers
+
+**Value:** no machine stops because a byproduct backs up, and no resource is
+left idle. One click suggests a whole chain that uses what's spare.
+**Effort:** M. Do it after auto-build (#2), and ideally the optimizer (#6),
+since it reuses both.
+
+- **What counts as a leftover:** anything the summary lists as spare:
+  - Byproducts. Heavy Oil Residue → Fuel leaves Polymer Resin, and Alumina
+    Solution / Aluminum Scrap leave water.
+  - Waste. Uranium Waste can become Plutonium Fuel Rods, and Plutonium Waste
+    can become Ficsonium.
+  - Unused source capacity, often in the middle of a long chain. Example:
+    a plan started from a 240/min iron node that only uses 200 leaves 40.
+- **UX:**
+  - A "✨ Use this" button on any port with spare output, and next to each
+    row of the summary's *Spare output* (and the waste warning).
+  - It suggests a few complete downstream trees, best first. Examples:
+    resin → Residual Rubber, leftover water → Wet Concrete, 40 iron ore →
+    ingots → rods. Show each with its machines and what it still needs.
+  - Picking one adds it as one undo step, laid out by #1. It is flexible, so
+    the spare-byproduct rules (production-planner.md, Byproducts) size it
+    from exactly what's left.
+- **Finding candidates** (pure `suggestUses(plan, catalog, item, perMin)`):
+  - Walk forward through `recipesConsuming` from the leftover item.
+  - Stop at good endpoints:
+    - an item already wanted in the plan (a goal or a missing input)
+    - a generator fuel, possibly adding the generator on Max
+    - an item worth AWESOME Sink points
+  - Rank by how much of the leftover each tree uses, how few extra raw
+    inputs it needs, and its machine count. The optimizer (#6) can do this
+    as an LP: "use all of X" as a constraint, the plan's objective as the
+    cost.
+  - Respect locked alternates. Cap the depth, and guard against loops, as in
+    #2.
+- **Done when:**
+  - Spare Uranium Waste suggests the plutonium rod chain.
+  - Spare Polymer Resin suggests Residual Rubber or Plastic.
+  - 40 spare iron ore gets at least one complete tree, and the spare is gone
+    once it's added.
 
 ### 10. 1.2 power multiplier
 
@@ -370,6 +438,13 @@ for the optimizer. **Effort:** M.
 
 ### 12. Byproduct-driven chains
 
+**Status:** done, moved up with #8 because nuclear waste needs it. The rules
+are in [production-planner.md](production-planner.md#byproducts): spare
+byproducts flow on, Max goals get them, numeric goals fall short instead of
+growing the maker, and spare is used before other producers. Left for the
+optimizer (#6): choosing the best mix of byproduct and dedicated producers,
+and naming the missing input of a loop that can't settle. The original notes:
+
 **Value:** "burn my spare Heavy Oil Residue into fuel" works without adding a
 goal. **Effort:** M. The optimizer (#6) covers most of this.
 
@@ -394,6 +469,69 @@ overlay mode.
 - Reuse the planner's `edgeStyle` preference in `GraphView.tsx`.
 - *Angled* keeps the lane router (`beltRouting.ts`). *Straight* and *curved*
   skip the router and use `getStraightPath` / `getBezierPath`.
+
+### 16. Byproduct loops
+
+**Value:** correctness. Loops that feed a byproduct back into their own chain
+are common, and today they break the solver. **Effort:** M–L. Needs design
+before code; it may be best solved together with the optimizer's LP (#6).
+
+- **Examples:**
+  - Aluminum: Alumina Solution needs water, and Aluminum Scrap gives some
+    back; players pipe it to the Alumina Solution water input, topped up by
+    a Water Extractor.
+  - Ficsonium: each Ficsonium Fuel Rod needs 40 Dark Matter Residue and
+    gives 20 back to the Particle Accelerator.
+  - Any recipe loop where an item comes back as a byproduct.
+- **What happens today** (reproduced on 2026-10-14, Alumina Solution →
+  Aluminum Scrap with the water piped back):
+  - Loop plus Water Extractor, Scrap 🎯360: rates run away to ~10¹⁷⁷ and the
+    plan says "A loop in the plan never settles".
+  - Only the loop, no other water: rates run to infinity with no warning.
+  - ⛔ Bauxite with a Max goal: **everything is 0**.
+- **Why:** byproduct belts *inside* a loop are still pulled (the stage split
+  in `solve.ts` only cuts belts between stages). Demand for the water makes
+  the scrap refinery grow, which needs more alumina, which needs more water.
+  The equal share on the water input also asks the loop for half the water,
+  whatever it can give. The runaway makes a Max goal's cost infinite, so it
+  gets 0.
+- **Directions to explore:**
+  - Treat a byproduct belt that closes a loop as *spare*: it carries what
+    the maker makes, used first, and the other producers make up the rest.
+    That's the same rule as between stages, but solved as a fixed point
+    inside the loop.
+  - If the loop alone can't supply itself (gain ≥ 1, as with Ficsonium),
+    report the shortfall as a missing input: "needs 20 more Dark Matter
+    Residue/min". Don't let it run away.
+  - Or hand loops to the LP from #6, which handles them exactly. Keep the
+    demand passes for loop-free plans.
+- **Done when:** the three aluminum cases above give finite, correct rates
+  (scrap 360 with the extractor topping up the water), the Max case is no
+  longer 0, and the Ficsonium loop names its missing input. Add each as a
+  solver test.
+
+### 15. Power goal
+
+**Value:** "power this factory" or "I need 20 GW" in one setting, instead of
+sizing each generator group by hand. A nice-to-have: per-group 🎯 MW targets
+(#8) already cover it with a little arithmetic. **Effort:** S–M.
+
+- **UX:** a power goal in the summary's power section, with two modes:
+  - *Cover what the plan uses:* generators make at least the plan's own
+    consumption, so the net is never negative.
+  - *A fixed amount:* "+N MW" on top of, or including, the plan's use.
+- **Which generators:** groups set to a new *Share of power goal* mode share
+  the goal by weight (default equal), the way edge shares split demand. A
+  plan with one such group gives it the whole goal.
+- **Implementation:**
+  - Store it in `PlanSettings` (optional, so saved plans keep loading).
+  - In the solver, the goal turns into numeric targets on those groups.
+  - "Cover the plan's use" is circular, because the fuel chains draw power
+    too. Iterate: solve, set the target to the consumption, solve again,
+    until it settles (a few rounds, since fuel chains use a small share of
+    what they make).
+- **Done when:** a coal plan set to "cover the plan's use" shows net ≥ 0, and
+  changing the factory updates the generator count.
 
 ---
 
