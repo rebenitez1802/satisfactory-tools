@@ -61,6 +61,12 @@ overclocking, Somersloops and power. Set 🎯 targets on goals and ⛔ limits on
 sources or machine groups, and everything else sizes itself. It works forward
 ("what can I make from this?"), backward ("what do I need?"), or both.
 
+Power plants are part of the plan: coal, fuel, biomass and nuclear generators
+take a 🎯 MW target or burn all the fuel they can get, and the summary shows
+power used, made and the net. Spare byproducts flow on into the chains they
+feed, so a nuclear plant's waste can be planned all the way to plutonium and
+Ficsonium fuel rods, with a warning for any waste left over.
+
 When one output feeds several belts, the ⑂ badge opens a load balancer for
 those exact rates. Plans live in tabs, autosave in the browser, and export as
 JSON.

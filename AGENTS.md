@@ -125,7 +125,8 @@ src/
   styles.css                Global styling (dark theme, CSS variables)
   catalog/                  Game data, framework-free: types, pack format, buildCatalog merge, icon helpers
   planner/                  Planner logic, framework-free: plan types, rates/power, solve.ts
-                            (targets & limits), create/edit/place helpers, layout.ts (Tidy, dagre)
+                            (targets & limits, byproduct stages), create/edit/place helpers,
+                            layout.ts (Tidy, dagre)
   components/planner/       Planner UI: PlannerTool (state, tabs, history), PlanCanvas (React Flow),
                             nodes.tsx (cards), Inspector, Picker, RecipeSelect, BalancerPopup, planner.css
   components/
@@ -256,6 +257,12 @@ PlannerContext { catalog, result, updateNode, openSplit, isRecipeHidden, edgeSty
     Max goals fair-share → final pass; then one `assemble` over the whole plan.
   - "Goal-like" means `Unit.anchor` is set: goal nodes, and generator recipe
     nodes with `power`. Use that, not `kind === 'goal'`, in solver code.
+- **Generators are recipe nodes** whose machine has `generation`. Their
+  recipes take fuel (and water) and may have **no outputs**, so don't assume
+  `recipe.outputs[0]` exists: use `recipeItem()` / `generatorOf()` from
+  `edit.ts`. Their anchor is `RecipeNode.power` (MW or `'max'`), and the
+  result has `NodeResult.generatedMw`, `totals.generatedMw` and power goals
+  (`GoalResult.power`).
 - **Game numbers come from the catalog,** never literals in UI code: machine
   power, slots, rates, belt tiers. The vanilla formulas are in
   `src/planner/rates.ts`.

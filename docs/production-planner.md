@@ -99,8 +99,8 @@ them.
   - ⛔ limiting the machine count caps it, as with any machine group.
 - Generators scale **linearly** with clock: N machines' worth at 100% make
   N × their MW and burn N × the fuel, whatever the clock.
-- Added from the palette, a generator starts with a target of one machine's
-  power; added from a fuel output, it starts on Max.
+- Added from "+ Goal" or the palette, a generator starts with a target of one
+  machine's power; added from a fuel output, it starts on Max.
 - The summary shows **power used**, **power made** and the **net** (spare or
   short).
 
@@ -162,8 +162,9 @@ byproducts (a recipe's second output, or all of a generator's outputs).
   badge. Clicking it opens a read-only load-balancer popup for those rates, with
   surplus as the leftover output, plus "Open in Load Balancer". Inputs fed by
   several edges get a merger badge.
-- **Summary:** total MW, buildings by type, shards and Somersloops, raw
-  resources, net outputs, surplus, missing inputs, bottlenecks.
+- **Summary:** total MW (power used; with generators, also power made and
+  the net), buildings by type, shards and Somersloops, raw resources, net
+  outputs, surplus, missing inputs, bottlenecks.
 - **Cards** are compact, in the style of Satisfactory Modeler: machine and
   count in the middle, input items on the left edge, outputs on the right.
   Details are in the hover tooltip; editing happens in the inspector.
@@ -174,7 +175,8 @@ byproducts (a recipe's second output, or all of a generator's outputs).
   **+** opens a blank plan and asks for its name; × deletes, with an Undo
   notice. Export/Import move plans as JSON.
 - **Quick start:** "⛏ + Resource" (what you have) or "🎯 + Goal" (what you
-  want); an empty plan offers both.
+  want: power plants first, biggest first, then items); an empty plan offers
+  both.
 - **Connections:** the whole item icon is the handle.
   - Drag onto a card to connect the matching port.
   - Drag onto empty canvas to pick a producer or consumer.
