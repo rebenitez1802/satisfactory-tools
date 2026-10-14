@@ -2,8 +2,11 @@
 
 Guide for AI coding agents (and humans) starting a fresh session in this repo.
 Read this first; `README.md` has the user-facing write-up of the load-balancer
-algorithm. The production planner is specified in `docs/production-planner.md`
-(behaviour plus deferred follow-ups), and its game data in `docs/data-model.md`.
+algorithm. The production planner is specified in `docs/production-planner.md`,
+and its game data in `docs/data-model.md`. **What to build next is in
+`docs/roadmap.md`**, with priorities, effort and implementation notes for each
+item. If you're picking up a roadmap item, read "Working on the planner" below
+first.
 
 ## What this is
 
@@ -20,7 +23,7 @@ browser.
 | Tool | Status | Entry point |
 | --- | --- | --- |
 | Load Balancer | Shipped (PR #1, polished in PR #2) | `src/components/LoadBalancerTool.tsx` |
-| Production Chains | v1 shipped (PR #3); follow-ups in `docs/production-planner.md` | `src/components/planner/PlannerTool.tsx` |
+| Production Chains | v1 shipped (PR #3); next steps in `docs/roadmap.md` | `src/components/planner/PlannerTool.tsx` |
 
 **Load Balancer:** given an input belt rate and a list of desired output rates,
 build a graph of splitters (1 → 2 or 3, even split) and mergers (≤3 → 1) that
@@ -109,7 +112,7 @@ also type-checks, and CI runs the same two steps.
 ## Code map
 
 ```
-docs/                       data-model.md, production-planner.md (spec + follow-ups)
+docs/                       roadmap.md (what's next), production-planner.md (behaviour), data-model.md
 scripts/                    Build-time importers (Node, not shipped): greeny data → base pack, wiki icons
 public/packs/base/          The base data pack: pack.json + icons/ (fetched at runtime)
 src/
@@ -196,6 +199,92 @@ Requirements agreed with the user (2026-10-13), now implemented:
 - Vanilla math lives in `src/planner/rates.ts`. Power scales with
   clock^1.321929, and Somersloops multiply power by (1 + filled/slots)². Slots
   can be partly filled.
+
+## Working on the planner
+
+### Data flow
+
+```
+PlannerTool  (plan tabs, useHistory undo stack, prefs)
+   │  plan: Plan  ── source of truth, autosaved to localStorage
+   ▼
+solvePlan(plan, catalog) → SolveResult      (pure, memoized; src/planner/solve.ts)
+   │
+   ▼
+PlannerContext { catalog, result, updateNode, openSplit, isRecipeHidden, edgeStyle }
+   ├─ PlanCanvas   React Flow; its node list only mirrors the plan (drag,
+   │               selection, measured size); positions are written back on drag stop
+   │    ├─ nodes.tsx   cards (read result.nodes.get(id))
+   │    └─ FlowEdge    belts (read result.edges)
+   ├─ Inspector    edits the selected node or belt
+   └─ PlanSummary  totals, goals, settings
+```
+
+### Rules of thumb
+
+- **Edit plans only through the pure helpers** in `src/planner/edit.ts`:
+  - `updateNode` also drops belts whose item no longer fits
+  - `setRecipe`, `removeNodes`, `connectPorts`, `retargetEdges`
+  - `copyNodes` / `pasteClip`
+
+  Add new helpers there, with tests. New nodes come from `createNode` in
+  `create.ts`; placement uses `placeBeside` in `place.ts`.
+- **One user action = one `setPlan` call = one undo step.**
+  `setPlan(updater, coalesceKey)` folds rapid edits with the same key (typing,
+  sliders) into a single step. Don't call `setPlan` several times for one
+  gesture.
+- **Saved plans must keep loading.** Plans live in localStorage
+  (`satisfactory-tools.planner.plans.v1`) and in exported JSON files.
+  - New `Plan`/`PlanSettings` fields should be optional with a default.
+  - A breaking change bumps `schemaVersion` and migrates in `loadStore` /
+    `validatePlan`.
+  - Preferences (`…planner.prefs.v1`) go through `loadPrefs`, which merges
+    defaults.
+- **Solver changes:**
+  - Update `docs/production-planner.md` and add cases to
+    `src/planner/__tests__/solve.test.ts`.
+  - The spec-example tests there must keep passing.
+  - Use the fixtures in `__tests__/fixtures.ts`: `recipeNode`,
+    `extractorNode`, `goalNode`, `supplyNode`, `plan()`, and `catalog`, which
+    is built from the committed `public/packs/base/pack.json`.
+  - Order of the solve: `withOpenEnds` → targets pass → scale by the tightest
+    limit → Max goals fair-share → final pass → `assemble`.
+- **Game numbers come from the catalog,** never literals in UI code: machine
+  power, slots, rates, belt tiers. The vanilla formulas are in
+  `src/planner/rates.ts`.
+- **UI building blocks:**
+  - `Icon` (with placeholder fallback)
+  - `RecipeIO`: ingredients → products as icons
+  - `RecipeSelect`
+  - `Picker`, fed by `producersOf` / `consumersOf` / `paletteOptions` /
+    `resourceOptions` / `goalOptions`
+  - `UpgradeChip`: Power Shard / Somersloop icons
+  - `NumberField`
+
+  Planner CSS lives in `planner.css` with a `pn-` prefix.
+
+### Checking UI changes in a browser
+
+The user reviews UI changes visually, so check every UI change with
+Playwright screenshots (setup is under "Workflow conventions"). Selectors and
+habits that have proved reliable:
+
+- **Nodes:** `.react-flow__node[data-id="<nodeId>"]`. Click `.pn-center` to
+  select a card without hitting its corner badges.
+- **Ports:** `.react-flow__handle[data-handleid="in:base:Desc_IronIngot_C"]`
+  (or `out:…`). Clicking a port opens its picker; dragging one connects.
+- **Canvas controls:** the empty pane is `.react-flow__pane`; fit view is
+  `.react-flow__controls-fitview`.
+- **Plans:** tabs are `.pn-tab`. `getByRole('button', { name: 'Sample', exact:
+  true })` opens the sample plan in a new tab. A fresh browser context has
+  empty localStorage, so it starts on the sample plan.
+- **Multi-select** is ⌘-click on macOS and Ctrl-click elsewhere.
+- **The inspector docks on the right** and can cover nodes. Click the pane to
+  deselect before targeting cards on the right.
+- **Icon `alt` text is the full tooltip,** not just the name. Use
+  `img[alt*="Smelter"]`.
+- **Use `deviceScaleFactor: 2`** for readable screenshots, and crop with
+  `locator.screenshot()` or a `clip`.
 
 ## Gotchas
 

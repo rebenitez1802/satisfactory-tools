@@ -1,0 +1,389 @@
+# Roadmap
+
+What comes after Production Planner v1, in priority order. Agreed with the user
+on 2026-10-14. Priorities:
+
+1. **Automation that helps players build plans faster** comes first.
+2. **Vanilla before mods.** Anything mod-specific is deferred.
+3. **Quick wins** ride along with the milestone they help.
+
+Effort: **XS** under an hour · **S** about half a day · **M** 1–2 days · **L** several days.
+
+How the planner behaves today is in [production-planner.md](production-planner.md).
+The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
+[`AGENTS.md`](../AGENTS.md); read its "Working on the planner" section first.
+
+| # | Item | Milestone | Value | Effort | Status |
+|---|---|---|---|---|---|
+| 1 | [Auto-layout](#1-auto-layout) | M1 | High | S | Next |
+| 2 | [Auto-build upstream](#2-auto-build-upstream-mode-2) | M1 | Very high | M | Next |
+| 3 | [Compare recipes at this node's rate](#3-compare-recipes-at-this-nodes-rate) | M1 | High | S | Next |
+| 4 | [Belt counts instead of red edges](#4-belt-counts-instead-of-red-edges) | M1 | Medium | XS–S | Next |
+| 5 | [Better default zoom](#5-better-default-zoom) | M1 | Low–Med | XS | Next |
+| 6 | [Optimizer](#6-optimizer-mode-3) | M2 | Very high | L | Planned |
+| 7 | [Split shares on outputs](#7-split-shares-on-outputs) | M2 | Medium | S–M | Planned |
+| 8 | [Generators and net power](#8-generators-and-net-power) | M2 | Med–High | M | Planned |
+| 9 | [Share a plan as a link](#9-share-a-plan-as-a-link) | M2 | Medium | S | Planned |
+| 10 | [1.2 power multiplier](#10-12-power-multiplier) | M2 | Medium | XS | Blocked on user's rules |
+| 11 | [World node limits](#11-world-node-limits) | M3 | Medium | M | Later |
+| 12 | [Byproduct-driven chains](#12-byproduct-driven-chains) | M3 | Low–Med | M | Later |
+| 13 | [Inspector covering cards](#13-inspector-covering-cards) | M3 | Low | S | Later |
+| 14 | [Belt line style in the balancer](#14-belt-line-style-in-the-balancer) | M3 | Low | XS | Later |
+| — | [Mods and data tooling](#deferred-mods-and-data-tooling) | — | — | — | Deferred |
+
+When an item ships, change its status to **Done (PR #n)** and move its rules
+into `production-planner.md`.
+
+---
+
+## M1 — Build faster
+
+**Goal:** typing "10 Modular Frames/min" gives a complete, tidy chain in one
+click, which the player then refines. Do the items in order: #2 depends on #1.
+
+### 1. Auto-layout
+
+**Value:** tidies hand-built plans, and is needed so auto-built chains are
+readable. **Effort:** S.
+
+- **UX:**
+  - A "Tidy layout" button in the canvas toolbar. It lays out the whole plan
+    left to right (resources → goals), as one undo step, then fits the view.
+  - Optionally, "Tidy selection" for only the selected nodes.
+- **Implementation:**
+  - Write a pure function `layoutPlan(plan, sizes, opts) → Map<nodeId, {x, y}>`
+    in `src/planner/layout.ts`.
+  - Use [`@dagrejs/dagre`](https://github.com/dagrejs/dagre) (small,
+    framework-free) with `rankdir: 'LR'`. Avoid elkjs: it is over 1 MB.
+  - Take node sizes from React Flow's `measured` width/height (see `rects` in
+    `PlanCanvas.tsx`), falling back to `CARD_W` × 100.
+  - Dagre breaks cycles by itself (recycling loops), but check that loops still
+    read sensibly.
+  - Keep parallel lines apart. Nodes sharing a split's source should be
+    stacked, not interleaved.
+  - Apply the result with one `setPlan` call (one undo step), then
+    `fitView({ duration: 300 })`.
+  - Auto-build (#2) calls the same function for only its new nodes, and
+    anchors them to the node it was started from.
+- **Done when:**
+  - No two cards overlap.
+  - Every belt runs left to right, except loop belts.
+  - The sample plan looks at least as clean as it does by hand.
+  - Undo restores the old positions.
+- **Tests:** unit tests on `layoutPlan` (no overlaps; producers left of
+  consumers in a DAG), and a Playwright screenshot of the sample after Tidy.
+
+### 2. Auto-build upstream (mode 2)
+
+**Value:** the biggest speed-up. A goal, or any missing input, becomes a full
+chain down to raw resources. **Effort:** M.
+
+- **UX:**
+  - **"⚡ Build chain" in three places:**
+    - the inspector, for a goal or a node with missing inputs
+    - first option in the picker that opens when you click an unconnected input
+    - next to each missing input in the summary panel
+  - **It builds back to raw resources.** It adds recipe nodes, then extractors
+    for mineable resources (miners/oil/water) or supplies for anything else.
+    Everything it adds is flexible, so the plan's existing targets and limits
+    still drive the rates.
+  - **It reuses before adding.** If the plan already has a flexible recipe
+    node making the needed item, it connects to that instead of adding a
+    duplicate. This should be an option, on by default.
+  - **It's one undo step,** and the new nodes go through the layout from #1.
+- **Recipe choice** (pure `chooseRecipe(item, ctx)`), in this order:
+  1. The player's remembered pick for that item. Store it in prefs as
+     `preferredRecipes: Record<ItemId, RecipeId>`, updated whenever they
+     switch recipes in the inspector.
+  2. The standard (non-alternate) recipe whose **main** output is the item.
+     Avoid recipes where the item is only a byproduct.
+  3. Otherwise, an unlocked alternate. Respect `isRecipeHidden`.
+  4. If none exists, the item becomes a supply node (hand-gathered things:
+     leaves, mycelia, alien parts, Somersloops, …).
+- **Raw resources:**
+  - Items in `catalog.extractorsFor` become an extractor node.
+  - Default extractor: the best tier available. Make it a preference later,
+    e.g. "Miner Mk.2".
+  - Water → Water Extractor. Crude Oil → Oil Extractor. Nitrogen → Resource
+    Well Extractor.
+  - New extractors are not limited, so they report what they need.
+- **Implementation:**
+  - Write a pure `buildUpstream(plan, catalog, start, ctx) → { plan, added }`
+    in `src/planner/autobuild.ts`, reusing `createNode`, `connectPorts` and
+    `newNodeId` from `create.ts` and `edit.ts`.
+  - Walk the inputs depth-first, using `portsOf()` to find each node's
+    inputs.
+  - Keep a set of already-visited `(item, recipe)` pairs so recipe loops
+    (Packaged ⇄ Unpackaged, Recycled Rubber/Plastic) can't recurse forever,
+    and cap the depth at about 25.
+  - Leave byproducts unconnected; they show up as spare output.
+  - Water inputs to refineries etc. need water nodes too; don't skip fluids.
+- **Done when:**
+  - A Modular Frame goal of 10/min builds a connected chain down to Iron Ore
+    and Limestone, with no missing inputs.
+  - Locked alternates are never chosen.
+  - A recipe the player switched to is reused the next time.
+  - Running it twice doesn't duplicate anything.
+- **Tests:**
+  - Unit tests: Modular Frame, Computer (deep, with fluids), Plastic (Heavy
+    Oil Residue byproduct), Packaged Water (loop guard).
+  - A Playwright run from an empty plan to a complete chain.
+
+### 3. Compare recipes at this node's rate
+
+**Value:** makes choosing an alternate a matter of reading numbers. Pairs with
+#2: build fast, then refine. **Effort:** S.
+
+- **UX:**
+  - The recipe dropdown (`RecipeSelect.tsx`) gets a toggle: *per machine* |
+    *at this node's rate*.
+  - At this node's rate, every option is scaled to the node's current main
+    output. Example: for 90 screws/min, 22.5 rods vs 1.7 steel beams vs 22.5
+    ingots.
+  - Each option also shows its machine count and MW at that rate.
+- **Implementation:**
+  - The node's rate is `result.nodes.get(id).outputs[0].produced`, or the
+    goal's demand when the node is idle.
+  - Scale with `machinesFor()`, then `recipeFlows()` and `groupPowerMw()` from
+    `rates.ts`.
+  - Drawn with `RecipeIO` plus a rate/scale prop.
+- **Done when:** switching the toggle shows the same rate on every option's
+  main output, and the numbers match what the inspector shows after picking
+  that recipe.
+
+### 4. Belt counts instead of red edges
+
+**Value:** fixes a misleading warning. An edge is a logical flow between
+groups, so 240/min on Mk.2 really means "2 belts". **Effort:** XS–S.
+
+- **UX:**
+  - The edge label becomes `240 · 2× Mk.2` when it needs more than one belt of
+    the plan's tier.
+  - Red stays for one case only: a single physical source that can't be split,
+    such as a lone extractor whose output is over its own belt's limit. Even
+    that should probably be just a hint. Ask the user.
+  - The belt inspector shows the belt count too.
+- **Implementation:**
+  - Solver: replace or extend `EdgeResult.overCapacity` with
+    `beltsNeeded = ceil(perMin / tier.ratePerMin)`.
+  - UI: the `FlowEdge.tsx` label, and `EdgeInspector` in `Inspector.tsx`.
+  - Pipes work the same way, with the pipe tier.
+- **Tests:** a solver unit test for `beltsNeeded`, and a screenshot.
+
+### 5. Better default zoom
+
+**Value:** cards are hard to read on wide plans. **Effort:** XS.
+
+- Clamp `fitView` with a `minZoom` (about 0.55) so cards stay readable;
+  scrolling is fine.
+- Add "Zoom to selection": the F key, or a button.
+- In `PlanCanvas.tsx`, see `FIT_VIEW`.
+
+---
+
+## M2 — Smarter plans
+
+### 6. Optimizer (mode 3)
+
+**Value:** "pick the best recipes for me." This is the final goal named in the
+spec. **Effort:** L.
+
+- **UX:**
+  - An "Optimize" action on a plan, or on a selected goal, with one objective:
+    *fewest raw resources* (default), *least power*, or *fewest buildings*.
+  - It proposes recipe changes, or builds a fresh chain like #2. Show a
+    before/after diff that the player accepts or discards (one undo step).
+- **Model** (linear program):
+  - **Variables:**
+    - `x_r ≥ 0`: machine-equivalents for each candidate recipe (unlocked
+      only)
+    - `e_i ≥ 0`: extraction or supply for each raw item `i`
+  - **Constraints:** for every item, production − consumption ≥ goal demand.
+    Byproducts become allowed surplus. Limits (⛔ nodes, and world limits
+    from #11) cap `e_i`.
+  - **Objective:**
+    - Fewest raw resources: weight each raw resource by its scarcity (world
+      supply from #11, or a fixed table at first).
+    - Least power: the MW per machine-equivalent from `rates.ts`. Power is
+      nonlinear in clock, so assume 100% clock.
+    - Fewest buildings: sum of `x_r`.
+  - Fractional machines are fine; no integer programming.
+- **Library:** try [`javascript-lp-solver`](https://github.com/JWally/jsLPSolver)
+  first (MIT, small, pure JS). If it is too slow or unreliable at about 300
+  recipe variables, use `highs` (WASM). Run it in a Web Worker if a solve
+  takes more than about 100 ms.
+- **Implementation:**
+  - Write a pure `optimize(catalog, goals, limits, objective)` in
+    `src/planner/optimize.ts`, returning recipe rates.
+  - Convert the result into a plan with #2's node-creation helpers and #1's
+    layout.
+  - Keep `solvePlan` as the single source of truth for displayed rates. The
+    optimizer only chooses the structure.
+- **Done when:**
+  - It matches small cases checked by hand. Write the expected recipe mix
+    into the test; don't trust memory of "best alternates".
+  - It respects locked alternates and limits.
+  - It reports infeasible plans clearly.
+- **Tests:** LP unit tests on small hand-checked chains, and a sanity check
+  that the optimized plan's `solvePlan` result meets every goal.
+
+### 7. Split shares on outputs
+
+**Value:** control over how a scarce input is split ("80 to plates, 40 to
+rods") without numeric goals. **Effort:** S–M.
+
+- **Today:**
+  - When several Max goals (or open ends) share a limit, the solver splits it
+    evenly: step 2 of `solveAnchored` weights each goal by
+    `1 / (fraction of limits it uses)`.
+  - `PlanEdge.share` exists, but only splits *demand* between several
+    producers feeding one input.
+- **Design:**
+  - Add an optional `weight` to Max goals (`GoalNode`). Open ends get a weight
+    from a per-node setting.
+  - Multiply it into the fair-share weight in step 2.
+  - The ⑂ split popup gets a share input per branch. Editing a branch's share
+    sets the weights of the Max goals downstream of that branch.
+- **Done when:** a 2 : 1 share on a 120-ingot split between plates and rods
+  gives 80 / 40 ingots.
+- **Tests:** solver unit tests next to "several Max goals behind one limit
+  share it evenly".
+
+### 8. Generators and net power
+
+**Value:** power is the next thing players plan, and nuclear waste chains
+come with it. **Effort:** M.
+
+- **Data:**
+  - Model generators as **recipes** that consume fuel (plus water) and produce
+    power, with nuclear waste as a byproduct. Add `Recipe.generatesMw?: number`
+    and a `generation` tag.
+  - Source: greeny's `generators` plus the overlay.
+  - Numbers from the research:
+
+    | Generator | MW | Fuels | Water | Byproduct |
+    |---|---|---|---|---|
+    | Biomass Burner | 30 | leaves, wood, mycelia, biomass, solid biofuel, packaged biofuel | — | — |
+    | Coal-Powered | 75 | coal, compacted coal, petroleum coke | 45 m³/min | — |
+    | Fuel-Powered | 250 | fuel, turbofuel, liquid biofuel, rocket fuel, ionized fuel | — | — |
+    | Nuclear Power Plant | 2500 | uranium rod (0.2/min), plutonium rod (0.1/min), ficsonium rod (1/min) | 240 m³/min | 10 uranium waste/min, 1 plutonium waste/min, none |
+
+  - Fuel per minute = MW × 60 / energy (MJ).
+  - Generators scale **linearly** with clock, not with the 1.32 power curve.
+    Generator machines need their own power-exponent semantics.
+  - Geothermal needs no fuel: 100/200/400 MW on impure/normal/pure geysers.
+    Model it as an extractor-like node, or defer it.
+- **UX:**
+  - Generator nodes look like recipe cards with a ⚡ output.
+  - The summary shows **generated vs consumed MW, and the net**.
+  - A goal of "+N MW" could come later.
+- **Done when:** a coal plant chain shows the right coal and water per
+  generator, and the net MW in the summary.
+
+### 9. Share a plan as a link
+
+**Value:** players send plans to each other with no backend. **Effort:** S.
+
+- Compress the plan with [`lz-string`](https://github.com/pieroxy/lz-string)
+  (`compressToEncodedURIComponent`) into `#/planner?plan=…`.
+- On load, run `validatePlan`, open the plan in a **new tab**, and clean the
+  URL.
+- Add a "Copy link" button to the plan menu.
+- Plans with dozens of nodes should stay under about 8 KB. Positions can be
+  rounded to integers.
+
+### 10. 1.2 power multiplier
+
+**Status:** blocked. The user will provide the exact rules (game option range
+0.25–5×; does it apply to generators?). **Effort:** XS once the rules are
+known.
+
+- Add `PlanSettings.powerMultiplier`. Apply it in `assemble()` (`solve.ts`)
+  to consumption only, unless the rules say otherwise.
+- Show it in the summary next to MW.
+- The recipe-cost multiplier waits on its rules too. Ask whether it scales
+  machine recipes or only building costs.
+
+---
+
+## M3 — Nice to have
+
+### 11. World node limits
+
+**Value:** "you only have 46 pure iron nodes on the map", plus resource caps
+for the optimizer. **Effort:** M.
+
+- **Data:**
+  - Add a `worldSupply` list to packs, per map, with resource, site type,
+    purity and count.
+  - Counts for the default map, from the wiki:
+
+    | Resource | Impure | Normal | Pure |
+    |---|---|---|---|
+    | Iron Ore | 39 | 42 | 46 |
+    | Copper Ore | 13 | 29 | 13 |
+    | Limestone | 15 | 50 | 29 |
+    | Coal | 15 | 31 | 16 |
+    | Caterium Ore | 0 | 9 | 8 |
+    | Raw Quartz | 3 | 7 | 7 |
+    | Sulfur | 6 | 5 | 5 |
+    | Bauxite | 5 | 6 | 6 |
+    | Uranium | 3 | 2 | 0 |
+    | SAM | 10 | 6 | 3 |
+    | Crude Oil (oil nodes) | 10 | 12 | 8 |
+    | Crude Oil (well satellites) | 8 | 6 | 4 |
+    | Nitrogen Gas (well satellites) | 2 | 7 | 36 |
+    | Water (well satellites) | 7 | 12 | 36 |
+
+  - Geysers: 9 / 13 / 9. Water from Water Extractors is unlimited.
+  - Sources: the per-resource pages on satisfactory.wiki.gg, e.g.
+    [Iron Ore](https://satisfactory.wiki.gg/wiki/Iron_Ore). Re-check them
+    before committing.
+- **UX:** a per-plan "Map: default / custom counts" setting (1.2 World
+  Randomization changes them). The summary shows the nodes used vs available
+  per resource, and warns when a plan uses more than exist.
+
+### 12. Byproduct-driven chains
+
+**Value:** "burn my spare Heavy Oil Residue into fuel" works without adding a
+goal. **Effort:** M. The optimizer (#6) covers most of this.
+
+- **Today:** demand only flows from goals, so a chain fed only by a byproduct
+  gets nothing.
+- **Idea:** a second pass that treats the spare output on a byproduct port
+  feeding a consumer as a limited supply, sized from the first pass's
+  production, and lets the open-end rule fill the downstream chain. Watch for
+  feedback when that chain loops back.
+
+### 13. Inspector covering cards
+
+**Value:** small polish. **Effort:** S. The docked inspector narrows the
+canvas, so cards on the right can slide underneath it. When a node is
+selected, pan it into view if it ended up under the inspector, or offer an
+overlay mode.
+
+### 14. Belt line style in the balancer
+
+**Value:** consistency. **Effort:** XS.
+
+- Reuse the planner's `edgeStyle` preference in `GraphView.tsx`.
+- *Angled* keeps the lane router (`beltRouting.ts`). *Straight* and *curved*
+  skip the router and use `getStraightPath` / `getBezierPath`.
+
+---
+
+## Deferred: mods and data tooling
+
+Not planned until the vanilla roadmap is done. The data model already supports
+these; see [data-model.md](data-model.md).
+
+- **Mod packs in the UI:** upload a pack JSON, validate it with zod, store it
+  in IndexedDB, and enable or disable packs per plan. `buildCatalog` already
+  merges packs and reports diagnostics.
+- **Importers:** ContentLib JSON (mods), and the game's own
+  `CommunityResources/Docs/en-US.json` (UTF-16). The Docs importer matters
+  only when a game patch changes recipes; until then, `npm run data:base` from
+  greeny's data is enough.
+- **In-game check:** the Smelter's Somersloop slots. The game data says 0,
+  while the wiki and other tools say 1, which is what we use. The user can
+  check this in a minute.

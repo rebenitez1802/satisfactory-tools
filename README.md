@@ -67,8 +67,8 @@ JSON.
 
 Game content comes from swappable **data packs**, so mods can add machines,
 resources and recipes. See [docs/data-model.md](docs/data-model.md) and
-[docs/production-planner.md](docs/production-planner.md), which also lists the
-deferred follow-ups.
+[docs/production-planner.md](docs/production-planner.md). What's coming next is
+in [docs/roadmap.md](docs/roadmap.md).
 
 ## Development
 

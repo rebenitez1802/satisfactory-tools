@@ -140,56 +140,15 @@ All eight steps are done for v1; see the polish backlog for what's next.
 
 ## Follow-ups
 
-Deferred on purpose. Grouped roughly by size; nothing here blocks using v1.
+Everything deferred from v1 is prioritized in [roadmap.md](roadmap.md): the
+"Build faster" automation milestone first, then the optimizer and power
+planning, then nice-to-haves. Mod tooling is deferred. When an item ships,
+document its behaviour here and mark it done in the roadmap.
 
-### Planning engine
+Known v1 limits that the roadmap addresses:
 
-- **Mode 2: auto-build.** From a goal (or a goal plus inputs), fill in the
-  chain with default or preferred recipes, as flexible nodes the user can
-  then edit.
-- **Mode 3: optimize.** Pick recipes and share scarce resources with an LP
-  solver (e.g. `javascript-lp-solver`). Same targets and limits as v1, so the
-  UI stays the same. This lifts the v1 simplifications listed above.
-- **Split shares on outputs.** Let the user set "2 : 1" between consumers from
-  the ⑂ badge or the belt inspector, instead of the even fair share between
-  Max goals. Shares already exist for several producers feeding one input.
-- **Byproduct-driven chains.** A chain fed only by a byproduct (Heavy Oil
-  Residue → fuel) gets no flow unless it has a goal; forward flow from surplus
-  would fix it.
-- **1.2 game options:** the power consumption multiplier and the recipe cost
-  multiplier. The user will provide the exact rules; the power one is a single
-  plan setting.
-- **Generators as nodes:** fuel in, MW out, nuclear waste as a byproduct, and
-  the plan's net power.
-- **World limits:** node counts per resource and purity for the default map,
-  with custom counts for World Randomization saves (counts per resource are
-  on the [wiki](https://satisfactory.wiki.gg/wiki/Resource_node)).
-
-### Game data and mods
-
-- **Mod packs in the UI:** upload a pack JSON, validate it (zod), store it in
-  IndexedDB, and enable or disable packs per plan. The catalog merge already
-  supports this (`buildCatalog`).
-- **Importers:** one from the game's own `en-US.json` (Docs), so new patches
-  don't wait on upstream data, and one from ContentLib JSON for mods.
-- **Verify in game:** Somersloop slots on the Smelter. The game data says 0;
-  the wiki and other tools say 1, which is what we use.
-
-### Planner UX
-
-- **Belt counts:** an edge is a logical flow between two groups, not one
-  physical belt. Instead of turning red over the tier limit, say "needs 3×
-  Mk.2 belts".
-- **Compare recipes at this node's rate:** an option in the recipe picker to
-  scale every recipe to the node's current output ("for your 90 screws/min:
-  22.5 rods vs 1.7 steel beams").
-- **Inspector width:** the docked inspector narrows the canvas, and cards on
-  the right can slide under it. Consider auto-pan or a slimmer panel.
-- **Default zoom** makes cards small on wide plans.
-- **Auto-layout** button (dagre or elk) for messy plans.
-- **Share a plan as a link** (plan compressed into the URL).
-
-### Load balancer
-
-- Offer the same belt line style preference (angled, straight, curved) in the
-  balancer.
+- Several Max goals behind one limit split it evenly; there is no per-branch
+  share yet (roadmap #7).
+- An edge over its belt tier turns red instead of saying how many belts it
+  needs (#4).
+- A chain fed only by a byproduct gets no flow unless it has a goal (#12).
