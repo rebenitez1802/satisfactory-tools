@@ -1,20 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Catalog, Recipe } from '../../catalog'
-import { recipeItem } from '../../planner'
+import { recipeItem, type RecipeAtRate } from '../../planner'
 import { Icon } from './Icon'
 import { RecipeIO } from './RecipeIO'
 
-/** Dropdown of recipes with product icon, name and ingredient/product icons. */
+/**
+ * Dropdown of recipes with product icon, name and ingredient/product icons:
+ * per machine, or each sized to a node's rate when `at` is given.
+ */
 export function RecipeSelect({
   value,
   options,
   catalog,
   onChange,
+  at,
 }: {
   value: string
   options: Recipe[]
   catalog: Catalog
   onChange: (recipeId: string) => void
+  at?: (recipe: Recipe) => RecipeAtRate | undefined
 }) {
   const [open, setOpen] = useState(false)
   const ordered = [...options.filter((r) => !r.alternate), ...options.filter((r) => r.alternate)]
@@ -69,7 +74,7 @@ export function RecipeSelect({
             {r.name}
             {r.alternate && <span className="pn-alt">ALT</span>}
           </span>
-          <RecipeIO recipe={r} catalog={catalog} size={16} />
+          <RecipeIO recipe={r} catalog={catalog} size={16} at={at?.(r)} />
         </span>
       </>
     )

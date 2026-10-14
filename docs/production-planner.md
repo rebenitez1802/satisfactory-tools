@@ -164,8 +164,20 @@ byproducts (a recipe's second output, or all of a generator's outputs).
     input needs, amber for what an output makes. Once a belt is connected,
     the rate moves to the belt label. An open end's output counts as having
     no belt, even though the solver treats its flow as used.
-- **Edges** show rate and item. They warn when over the selected belt or pipe
-  tier. Both are set to **No limit** by default, in new plans and the sample.
+- **Edges** show rate and item. Both the belt and the pipe tier are set to
+  **No limit** by default, in new plans and the sample. With a tier set, an
+  edge says how many belts or pipes of it the flow needs: an edge joins two
+  machine groups, so 240/min on Mk.2 is "2× Mk.2" under the rate, not an
+  error. The belt inspector shows the count too.
+  - The count assumes the flow can be shared out over the belts, which only
+    works if **every machine fits on one belt**: a machine puts out (or
+    takes in) an item through one port, so one belt. When one machine at
+    either end makes or takes more than a belt of the tier carries, e.g. a
+    Mk.2 miner (120/min) on Mk.1 belts, or a smelter at 250% eating 75
+    ore/min, no number of belts helps. The edge then turns **red** with no
+    count, and says the slowest tier that would carry that machine ("needs
+    Mk.2"), or that none does. For a limited extractor group the best site
+    counts; a group's part machine counts at its part clock.
 - **Splits and merges:** an output port feeding several edges gets a splitter
   badge. Clicking it opens a read-only load-balancer popup for those rates, with
   surplus as the leftover output, plus "Open in Load Balancer". Inputs fed by
@@ -192,7 +204,16 @@ byproducts (a recipe's second output, or all of a generator's outputs).
     to delete it.
   - Click an item to open its picker; the new node is placed beside the card.
 - **Editing:** select a node to edit it in the inspector. The recipe picker
-  shows ingredient and product icons with per-machine rates. Somersloops are a
+  shows ingredient and product icons. A toggle (a preference, on by
+  default) switches between rates **per machine** at 100% and **at this
+  node's rate**: every option sized to make what the node makes now (its
+  main product, or a generator group's MW), with its machine count and
+  power. The numbers are what the node shows after picking that option
+  (`recipeAtRate` in `src/planner/compare.ts`); a ⛔ limited node keeps its
+  machine count instead. A node that makes nothing has no toggle.
+- **Inspector:** it docks on the right and narrows the canvas. When it opens
+  (or the canvas narrows for any reason), the canvas pans just enough to
+  keep the selected nodes in view. Somersloops are a
   single "Amplify ×2" toggle, with partly filled slots behind "Partial…".
 - **Tidy layout** (canvas toolbar) arranges the plan left to right, from
   resources to goals, as one undo step, then fits the view. With two or more
@@ -253,8 +274,9 @@ byproducts (a recipe's second output, or all of a generator's outputs).
   - The new nodes are laid out with Tidy's rules, anchored to the node they
     were built for, and the view fits them.
 - **Preferences** apply to every plan: unlocked alternates, belt line style
-  (angled, straight or curved), whether ⚡ Build chain reuses nodes, and the
-  recipe last picked per item.
+  (angled, straight or curved), whether ⚡ Build chain reuses nodes, the
+  recipe last picked per item, and whether the recipe picker compares at the
+  node's rate.
 
 ## Build steps
 
@@ -285,8 +307,6 @@ Known v1 limits that the roadmap addresses:
 
 - Several Max goals behind one limit split it evenly; there is no per-branch
   share yet (roadmap #7).
-- An edge over its belt tier turns red instead of saying how many belts it
-  needs (#4).
 - Byproducts fed back into their own loop (aluminum scrap's water piped to
   Alumina Solution, Ficsonium's Dark Matter Residue) are still pulled, and
   the rates run away or drop to 0 (#16).

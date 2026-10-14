@@ -28,7 +28,7 @@
 // downstream chain from it. A byproduct whose maker has nothing else to run
 // for is still pulled like a main product.
 
-import type { Catalog, ItemId, Machine, MachineId, Recipe } from '../catalog'
+import type { Catalog, ItemId, Machine, MachineId, Recipe, TransportTierId } from '../catalog'
 import {
   extractorPowerMw,
   extractorRate,
@@ -111,8 +111,26 @@ export interface GoalResult {
 
 export interface EdgeResult {
   perMin: number
-  /** Throughput of the selected belt/pipe tier when this edge exceeds it. */
-  overCapacity?: number
+  /**
+   * With a belt or pipe tier set: that tier and how many of them the flow
+   * needs side by side. An edge joins two machine groups, so it can be
+   * several belts, as long as each machine fits on one (see tooFast).
+   */
+  belts?: { tier: TransportTierId; count: number }
+  /**
+   * Set instead of `belts` when one machine at either end makes or takes
+   * more than a single belt or pipe of the tier carries. A machine puts out
+   * (or takes in) an item through one port, so no number of slower belts
+   * can carry it: the edge can't be built on that tier.
+   */
+  tooFast?: {
+    /** What that one machine makes or takes, per minute. */
+    perMin: number
+    /** The producing ('out') or consuming ('in') end. */
+    end: 'out' | 'in'
+    /** The slowest tier of the same kind that carries it; unset if none does. */
+    needs?: TransportTierId
+  }
 }
 
 /** An output port feeding several edges: a candidate for a load balancer. */
@@ -704,6 +722,8 @@ function assemble(
     if (v > EPS) m.set(item, (m.get(item) ?? 0) + v)
   }
   const flowOf = (edges: PlanEdge[] | undefined) => (edges ?? []).reduce((s, e) => s + pass.edgeFlow.get(e.id)!, 0)
+  // Activity of one machine (or extractor) of a group, for belt warnings.
+  const oneMachine = new Map<string, number>()
 
   for (const n of plan.nodes) {
     const unit = g.units.get(n.id)
@@ -753,6 +773,7 @@ function assemble(
         ? { ...machineSetup(unit.machine, a, mode, { count: n.count }), shards: shardsNeeded(unit.machine, n.clock) }
         : machineSetup(unit.machine, a, mode, { clock: n.clock })
       res.setup = setup
+      oneMachine.set(n.id, Math.min(a, setup.clock))
       res.powerMw = groupPowerMw(unit.machine, setup.count, setup.clock, n.sloops, unit.recipe)
       if (unit.mwPerUnit !== undefined) {
         res.generatedMw = a * unit.mwPerUnit
@@ -775,6 +796,7 @@ function assemble(
       // As many sites as the demand needs, like a flexible recipe node.
       const setup = machineSetup(unit.machine, unit.perExtractor > EPS ? a / unit.perExtractor : 0, mode, { clock: n.clock })
       res.setup = setup
+      oneMachine.set(n.id, Math.min(a, unit.perExtractor * setup.clock))
       const by = unit.machine.extraction?.poweredBy
       const driver = by ? catalog.machines.get(by) : undefined
       res.powerMw = groupPowerMw(unit.machine, setup.count, setup.clock, n.sloops) + (driver && a > EPS ? machinePowerMw(driver, setup.clock) : 0)
@@ -792,6 +814,8 @@ function assemble(
       const clock = configured > EPS ? (n.clock * a) / configured : 0
       res.clock = clock
       res.capacity = configured
+      const best = Math.max(0, ...n.sites.map((s) => extractorRate(unit.machine!, { sites: [{ ...s, count: 1 }], clock, sloops: n.sloops }, catalog.purities)))
+      oneMachine.set(n.id, Math.min(a, best))
       const by = unit.machine.extraction?.poweredBy
       res.powerMw = a > EPS ? extractorPowerMw(unit.machine, { ...n, clock }, by ? catalog.machines.get(by) : undefined) : 0
       const sites = n.sites.reduce((s, x) => s + x.count, 0)
@@ -812,15 +836,29 @@ function assemble(
     nodes.set(n.id, res)
   }
 
-  // Edges, with belt/pipe capacity warnings.
+  // Edges: how many belts or pipes of the plan's tier each one needs, if
+  // every machine at both ends fits on one.
   const tier = (id?: string) => (id ? catalog.transportTiers.get(id) : undefined)
+  const tiers = [...catalog.transportTiers.values()].sort((x, y) => x.ratePerMin - y.ratePerMin)
   const belt = tier(plan.settings.beltTier)
   const pipe = tier(plan.settings.pipeTier)
   const edges = new Map<string, EdgeResult>()
   for (const e of g.edges) {
     const perMin = pass.edgeFlow.get(e.id)!
     const cap = catalog.items.get(e.item)?.form === 'solid' ? belt : pipe
-    edges.set(e.id, cap && perMin > cap.ratePerMin + EPS ? { perMin, overCapacity: cap.ratePerMin } : { perMin })
+    if (!cap || cap.ratePerMin <= EPS) {
+      edges.set(e.id, { perMin })
+      continue
+    }
+    const out = (oneMachine.get(e.source) ?? 0) * (g.units.get(e.source)!.outputs.get(e.item) ?? 0)
+    const inn = (oneMachine.get(e.target) ?? 0) * (g.units.get(e.target)!.inputs.get(e.item) ?? 0)
+    const one = Math.max(out, inn)
+    if (perMin > EPS && one > cap.ratePerMin + EPS) {
+      const needs = tiers.find((t) => t.kind === cap.kind && t.ratePerMin >= one - EPS)?.id
+      edges.set(e.id, { perMin, tooFast: { perMin: one, end: out >= inn ? 'out' : 'in', ...(needs ? { needs } : {}) } })
+    } else {
+      edges.set(e.id, { perMin, belts: { tier: cap.id, count: Math.max(1, Math.ceil(perMin / cap.ratePerMin - EPS)) } })
+    }
   }
 
   // Splits and merges.

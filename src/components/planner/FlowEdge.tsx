@@ -9,7 +9,8 @@ import {
   type EdgeProps,
 } from '@xyflow/react'
 import type { ItemId } from '../../catalog'
-import { fmt } from './format'
+import type { EdgeResult } from '../../planner'
+import { fmt, tierName } from './format'
 import { Icon } from './Icon'
 import { usePlanner } from './plannerContext'
 
@@ -20,10 +21,15 @@ const TURN_BEFORE = 40
 const LOOP_OUT = 18
 const LOOP_BELOW = 26
 
-export type FlowEdgeData = { item: ItemId; perMin: number; overCapacity?: number }
+export type FlowEdgeData = { item: ItemId; perMin: number } & Pick<EdgeResult, 'belts' | 'tooFast'>
 export type PlanFlowEdge = Edge<FlowEdgeData>
 
-/** A belt or pipe: colored by item form, labeled with its item and rate. */
+/**
+ * A belt or pipe: colored by item form, labeled with its item and rate. An
+ * edge joins two machine groups, so with a tier set it says how many belts it
+ * takes ("2× Mk.2" under the rate) rather than warning. It is red only when
+ * it can't be built: one machine needs more than a belt of the tier carries.
+ */
 export function FlowEdge({
   id,
   source,
@@ -37,7 +43,7 @@ export function FlowEdge({
   data,
   selected,
 }: EdgeProps<PlanFlowEdge>) {
-  const { catalog, edgeStyle } = usePlanner()
+  const { catalog, edgeStyle, settings } = usePlanner()
   const from = useInternalNode(source)
   const to = useInternalNode(target)
   const loop = edgeStyle === 'step' ? loopBelow(from, to, sourceX, sourceY, targetX, targetY) : undefined
@@ -63,8 +69,22 @@ export function FlowEdge({
   const item = data ? catalog.items.get(data.item) : undefined
   const fluid = item && item.form !== 'solid'
   const idle = !data || data.perMin <= 1e-6
-  const over = data?.overCapacity !== undefined
-  const stroke = over ? '#ef4444' : fluid ? (item?.color ?? '#38bdf8') : '#8aa0b8'
+  const tooFast = data?.tooFast
+  const stroke = tooFast ? '#ef4444' : fluid ? (item?.color ?? '#38bdf8') : '#8aa0b8'
+  const tier = data?.belts ? catalog.transportTiers.get(data.belts.tier) : undefined
+  const count = tier && data!.belts!.count > 1 ? data!.belts!.count : 0
+  const kind = fluid ? 'pipe' : 'belt'
+  const unit = fluid ? ' m³' : ''
+  const planTier = catalog.transportTiers.get((fluid ? settings.pipeTier : settings.beltTier) ?? '')
+  const needs = tooFast?.needs ? catalog.transportTiers.get(tooFast.needs) : undefined
+  const title = [
+    item?.name,
+    count && tier ? `${count} ${tier.name} ${kind}s (${fmt(tier.ratePerMin)}${unit}/min each)` : undefined,
+    tooFast && planTier ? tooFastText(tooFast, tierName(planTier), needs && tierName(needs), kind, unit) : undefined,
+  ]
+    .filter(Boolean)
+    .join('\n')
+  const sub = tooFast ? (needs ? `needs ${tierName(needs)}` : `no ${kind} fits`) : count && tier ? `${count}× ${tierName(tier)}` : undefined
 
   return (
     <>
@@ -81,17 +101,46 @@ export function FlowEdge({
       {data && item && (
         <EdgeLabelRenderer>
           <div
-            className={`pn-edge-label nodrag nopan${over ? ' over' : ''}${selected ? ' selected' : ''}`}
+            className={`pn-edge-label nodrag nopan${tooFast ? ' over' : ''}${selected ? ' selected' : ''}`}
             style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
-            title={over ? `Over the ${fmt(data.overCapacity!)}/min ${fluid ? 'pipe' : 'belt'} limit` : item.name}
+            title={title}
           >
             <Icon of={item} size={16} />
-            {fmt(data.perMin)}
-            {fluid ? ' m³' : ''}
+            {sub ? (
+              // Stacked, so the label stays narrow enough for the gap between columns.
+              <span className="pn-edge-stack">
+                <span>
+                  {fmt(data.perMin)}
+                  {unit}
+                </span>
+                <span className="pn-edge-belts">{sub}</span>
+              </span>
+            ) : (
+              <>
+                {fmt(data.perMin)}
+                {unit}
+              </>
+            )}
           </div>
         </EdgeLabelRenderer>
       )}
     </>
+  )
+}
+
+/** Why an edge can't be built on the plan's tier, for its tooltip and the belt inspector. */
+export function tooFastText(
+  t: NonNullable<EdgeResult['tooFast']>,
+  tierName: string,
+  needs: string | undefined,
+  kind: string,
+  unit: string,
+): string {
+  const verb = t.end === 'out' ? 'makes' : 'takes'
+  const port = t.end === 'out' ? 'output' : 'input'
+  return (
+    `One machine ${verb} ${fmt(t.perMin)}${unit}/min through one ${port}, more than a ${tierName} ${kind} carries, ` +
+    `so more ${kind}s can't help. ${needs ? `It needs ${needs} or faster, or a lower clock.` : `No ${kind} carries that much: lower the clock.`}`
   )
 }
 

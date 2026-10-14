@@ -17,8 +17,8 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 |---|---|---|---|---|---|
 | 1 | [Auto-layout](#1-auto-layout) | M1 | High | S | Done (PR #5) |
 | 2 | [Auto-build upstream](#2-auto-build-upstream-mode-2) | M1 | Very high | M | Done (PR #9) |
-| 3 | [Compare recipes at this node's rate](#3-compare-recipes-at-this-nodes-rate) | M1 | High | S | Next |
-| 4 | [Belt counts instead of red edges](#4-belt-counts-instead-of-red-edges) | M1 | Medium | XS–S | Next |
+| 3 | [Compare recipes at this node's rate](#3-compare-recipes-at-this-nodes-rate) | M1 | High | S | Done (PR #11) |
+| 4 | [Belt counts instead of red edges](#4-belt-counts-instead-of-red-edges) | M1 | Medium | XS–S | Done (PR #11) |
 | 5 | [Better default zoom](#5-better-default-zoom) | M1 | Low–Med | XS | Done (PR #5) |
 | — | [Rates on unconnected ports](#quick-win-rates-on-unconnected-ports) | M1 | Medium | XS | Done (PR #5) |
 | 6 | [Optimizer](#6-optimizer-mode-3) | M2 | Very high | L | Planned |
@@ -29,7 +29,7 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | 10 | [1.2 power multiplier](#10-12-power-multiplier) | M2 | Medium | XS | Blocked on user's rules |
 | 11 | [World node limits](#11-world-node-limits) | M3 | Medium | M | Later |
 | 12 | [Byproduct-driven chains](#12-byproduct-driven-chains) | M2 | Med–High | M | Done (PR #6) |
-| 13 | [Inspector covering cards](#13-inspector-covering-cards) | M3 | Low | S | Later |
+| 13 | [Inspector covering cards](#13-inspector-covering-cards) | M3 | Low | S | Done (PR #11) |
 | 14 | [Belt line style in the balancer](#14-belt-line-style-in-the-balancer) | M3 | Low | XS | Later |
 | 15 | [Power goal](#15-power-goal) | M3 | Low | S–M | Later |
 | 16 | [Byproduct loops](#16-byproduct-loops) | M3 | High | M–L | Later, needs design |
@@ -54,7 +54,7 @@ and useful straight away while playing. Reorder freely.
 | Order | PR | Items | Why together |
 |---|---|---|---|
 | 1 | Build chain | #2 | Done (PR #9). #6 and #17 reuse its node-building helpers. |
-| 2 | Refine and read | #3, #4, #13 | Small polish for reading and refining a built plan; one screenshot pass. Closes M1. |
+| 2 | Refine and read | #3, #4, #13 | Done (PR #11). Closes M1. |
 | 3 | Build in game | #21, #20 | Small and independent of the solver, and it helps right away while playing. Together the summary can show what's left to build and what it costs. |
 | 4 | Solver core | #6 (LP core), #16 | An LP solves byproduct loops exactly; isolated because it changes rates. |
 | 5 | Optimize | #6 (UI), #11 | The Optimize action; world node counts weigh "fewest raw resources". |
@@ -177,6 +177,11 @@ chain down to raw resources. **Effort:** M.
 
 ### 3. Compare recipes at this node's rate
 
+**Done.** Its behaviour is in
+[production-planner.md](production-planner.md#interaction) ("Editing").
+The user chose "at this node's rate" as the default view; the toggle is a
+preference. Generators compare fuels at the group's MW.
+
 **Value:** makes choosing an alternate a matter of reading numbers. Pairs with
 #2: build fast, then refine. **Effort:** S.
 
@@ -198,6 +203,17 @@ chain down to raw resources. **Effort:** M.
   that recipe.
 
 ### 4. Belt counts instead of red edges
+
+**Done.** Its behaviour is in
+[production-planner.md](production-planner.md#presentation) ("Edges").
+Red is kept for one case only, and it's a real error: one machine at
+either end makes or takes more than a belt of the tier carries. The count
+would be meaningless there (one machine's 120/min can't go onto two 60/min
+belts), so the edge shows the tier it needs instead ("needs Mk.2"), as
+the user pointed out while testing. `EdgeResult.overCapacity` became
+`belts: { tier, count }`, or `tooFast: { perMin, end, needs }`. The count sits under the rate (not `240 · 2× Mk.2` on one
+line) so labels fit between Tidy's columns. Not done: counts on
+unconnected ports. For #18 and #19, `belts.count` is the starting point.
 
 **Value:** fixes a misleading warning. An edge is a logical flow between
 groups, so 240/min on Mk.2 really means "2 belts". **Effort:** XS–S.
@@ -585,6 +601,12 @@ goal. **Effort:** M. The optimizer (#6) covers most of this.
   feedback when that chain loops back.
 
 ### 13. Inspector covering cards
+
+**Done.** Agreed with the user: pan rather than an overlay. When the
+canvas narrows (the inspector opening), it pans just enough to keep the
+selected nodes in view (`reveal` in `PlanCanvas.tsx`); nodes added from a
+picker use the same pan. The rules are in
+[production-planner.md](production-planner.md#interaction) ("Inspector").
 
 **Value:** small polish. **Effort:** S. The docked inspector narrows the
 canvas, so cards on the right can slide underneath it. When a node is

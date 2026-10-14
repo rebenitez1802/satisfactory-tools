@@ -332,9 +332,25 @@
   font-variant-numeric: tabular-nums;
   pointer-events: all;
 }
+.pn-edge-stack {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  padding: 1px 0;
+}
+.pn-edge-belts {
+  color: var(--text-dim);
+  font-size: 9.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+/* Can't be built on the plan's tier: one machine needs more than a belt carries. */
 .pn-edge-label.over {
   border-color: var(--red);
   color: #fecaca;
+}
+.pn-edge-label.over .pn-edge-belts {
+  color: #fca5a5;
 }
 .pn-edge-label.selected {
   border-color: var(--accent);
@@ -835,7 +851,21 @@
 }
 .pn-io-machine {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   opacity: 0.8;
+}
+.pn-io-count {
+  color: var(--text);
+  white-space: nowrap;
+}
+.pn-seg-small {
+  align-self: flex-start;
+}
+.pn-seg-small button {
+  padding: 3px 9px;
+  font-size: 11px;
 }
 
 /* Recipe dropdown */

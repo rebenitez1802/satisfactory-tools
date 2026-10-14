@@ -1,6 +1,6 @@
 import type { Catalog, ItemId } from '../../catalog'
 import type { ItemRate, MachineMode, Plan, PlanSettings, SolveResult } from '../../planner'
-import { fmt, mw, pct } from './format'
+import { fmt, mw, pct, tierName } from './format'
 import { Icon } from './Icon'
 import { nodeLabel } from './labels'
 import type { EdgeStyle } from './storage'
@@ -187,7 +187,7 @@ export function PlanSummary({
               <option value="">No limit</option>
               {belts.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name.replace('Conveyor Belt ', '')} · {t.ratePerMin}
+                  {tierName(t)} · {t.ratePerMin}
                 </option>
               ))}
             </select>
@@ -198,7 +198,7 @@ export function PlanSummary({
               <option value="">No limit</option>
               {pipes.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name.replace('Pipeline ', '')} · {t.ratePerMin}
+                  {tierName(t)} · {t.ratePerMin}
                 </option>
               ))}
             </select>
