@@ -43,12 +43,16 @@ function PlannerGate() {
   )
 }
 
+/**
+ * A new plan keeps the current one's machine mode. Belt and pipe limits start
+ * off: an edge joins whole machine groups, so it can always be several belts.
+ */
 function blankPlan(catalog: Catalog, settings?: PlanSettings): Plan {
   return {
     schemaVersion: 1,
     name: 'Untitled plan',
     packs: catalog.packs.map((p) => ({ id: p.id, version: p.version })),
-    settings: { machineMode: settings?.machineMode ?? 'fractional', beltTier: settings?.beltTier, pipeTier: settings?.pipeTier },
+    settings: { machineMode: settings?.machineMode ?? 'fractional' },
     nodes: [],
     edges: [],
   }

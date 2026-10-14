@@ -163,7 +163,7 @@ byproducts (a recipe's second output, or all of a generator's outputs).
     the rate moves to the belt label. An open end's output counts as having
     no belt, even though the solver treats its flow as used.
 - **Edges** show rate and item. They warn when over the selected belt or pipe
-  tier.
+  tier. Both limits are off (None) by default, in new plans and the sample.
 - **Splits and merges:** an output port feeding several edges gets a splitter
   badge. Clicking it opens a read-only load-balancer popup for those rates, with
   surplus as the leftover output, plus "Open in Load Balancer". Inputs fed by
