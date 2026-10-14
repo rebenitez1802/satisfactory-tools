@@ -38,6 +38,23 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 When an item ships, change its status to **Done (PR #n)** and move its rules
 into `production-planner.md`.
 
+### Delivery plan
+
+Items are grouped into PRs by the code they touch and how much they risk,
+since every merge deploys. Changes to how the solver calculates rates get
+their own PR. Agreed with the user on 2026-10-14; one agent works through
+them in this order:
+
+| Order | PR | Items | Why together |
+|---|---|---|---|
+| 1 | Build chain | #2 | The largest piece; #6 and #17 reuse its node-building helpers. |
+| 2 | Refine and read | #3, #4, #13 | Small polish for reading and refining a built plan; one screenshot pass. Closes M1. |
+| 3 | Solver core | #6 (LP core), #16 | An LP solves byproduct loops exactly; isolated because it changes rates. |
+| 4 | Optimize | #6 (UI), #11 | The Optimize action; world node counts weigh "fewest raw resources". |
+| 5 | Use leftovers | #17 | Builds on #2 (adding nodes) and #6 (ranking suggestions). |
+| any time | Small standalones | #9, #15, #14 | Independent; slot one in between the big ones. |
+| blocked | — | #10 | Waits on the user's rules. |
+
 ---
 
 ## M1 — Build faster
