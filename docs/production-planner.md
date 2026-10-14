@@ -184,7 +184,8 @@ byproducts (a recipe's second output, or all of a generator's outputs).
   several edges get a merger badge.
 - **Summary:** total MW (power used; with generators, also power made and
   the net), buildings by type, shards and Somersloops, raw resources, net
-  outputs, surplus, missing inputs, bottlenecks.
+  outputs, surplus, missing inputs, bottlenecks, then the build checklist's
+  progress and the build cost (see Interaction).
 - **Cards** are compact, in the style of Satisfactory Modeler: machine and
   count in the middle, input items on the left edge, outputs on the right.
   Details are in the hover tooltip; editing happens in the inspector.
@@ -273,6 +274,39 @@ byproducts (a recipe's second output, or all of a generator's outputs).
     nothing.
   - The new nodes are laid out with Tidy's rules, anchored to the node they
     were built for, and the view fits them.
+- **Build checklist** keeps track of a plan while you build it in the game.
+  It's a visual aid, one mark per node meaning "this node is built"; belts
+  can't be marked and there is no partial progress. The solver ignores it.
+  - A ✓ in a card's top-left corner (shown on hover until the node is
+    marked) and a toggle at the top of the inspector mark a node done; with
+    several nodes selected, the inspector marks or clears them all. Done
+    cards turn their ✓ green and fade, so what's left stands out.
+  - The mark remembers how many of the node's machines (or extractors) it
+    had, counted whole (`done: { count }` on the plan node, set with
+    `markDone` in `src/planner/edit.ts`). If the plan later needs more (done
+    with 4, now needs 8), the node is **not done any more**: the card turns
+    amber with `✓ 4/8`, the inspector says how many more to build, and only
+    those extra machines count toward "still needed". Clicking the ✓ (or
+    "All 8 built") marks it done again with the new count; "Clear the mark"
+    removes it. If the plan goes back down to 4 or fewer, it is done again
+    without a click.
+  - A new recipe, machine, resource or item clears the mark, since that's a
+    different thing to build. Copied, pasted and duplicated nodes start not
+    done. Marks are saved with the plan, so they survive a reload and
+    export/import.
+  - The summary shows progress ("3 of 8 nodes done", with a bar) and how
+    many marked nodes need more machines.
+- **Build cost** (summary): the items needed to build every building the
+  plan uses, from each machine's `buildCost` in the game data
+  (`buildCost` in `src/planner/buildcost.ts`).
+  - Buildings are counted whole per node: 2.4 Smelters cost 3, in either
+    machine mode. A resource well counts its satellites plus one
+    pressurizer.
+  - Once any node is marked, each row shows **still needed / total**. Still
+    needed leaves out done nodes, except the extra machines a node needs
+    beyond its mark.
+  - A machine with no known cost is listed as "cost unknown", never counted
+    as free. Belts, pipes, splitters and mergers aren't counted.
 - **Preferences** apply to every plan: unlocked alternates, belt line style
   (angled, straight or curved), whether ⚡ Build chain reuses nodes, the
   recipe last picked per item, and whether the recipe picker compares at the

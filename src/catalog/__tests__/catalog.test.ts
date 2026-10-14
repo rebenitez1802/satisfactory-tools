@@ -95,6 +95,28 @@ describe('base pack', () => {
     expect(catalog.machines.get('base:Build_Packager_C')!.amplifier).toBeUndefined()
   })
 
+  it('knows what every machine costs to build', () => {
+    const cost = (id: string) =>
+      Object.fromEntries(catalog.machines.get(`base:${id}`)!.buildCost!.map((a) => [catalog.items.get(a.item)!.name, a.amount]))
+    for (const m of catalog.machines.values()) expect(m.buildCost?.length, m.id).toBeGreaterThan(0)
+    // Checked against satisfactory.wiki.gg.
+    expect(cost('Build_ConstructorMk1_C')).toEqual({ 'Reinforced Iron Plate': 2, Cable: 8 })
+    expect(cost('Build_MinerMk3_C')).toEqual({
+      'Portable Miner': 3,
+      'Steel Pipe': 50,
+      Supercomputer: 5,
+      'Fused Modular Frame': 10,
+      'Turbo Motor': 3,
+    })
+    expect(cost('Build_GeneratorNuclear_C')).toEqual({
+      Concrete: 250,
+      'Heavy Modular Frame': 25,
+      Supercomputer: 10,
+      Cable: 200,
+      'Alclad Aluminum Sheet': 100,
+    })
+  })
+
   it('has an icon file for every item and machine', () => {
     for (const e of [...catalog.items.values(), ...catalog.machines.values()]) {
       expect(e.icon, e.id).toMatch(/^packs\/base\/icons\/.+\.png$/)
@@ -151,6 +173,24 @@ describe('pack merging', () => {
     expect(ingot.outputs).toEqual([{ item: 'base:Desc_IronIngot_C', amount: 1 }])
     expect(catalog.recipes.has('base:Recipe_Alternate_PureIronIngot_C')).toBe(false)
     expect(catalog.recipesConsuming.get('base:Desc_IronPlate_C')).toContain('mymod:Recipe_Gear_C')
+  })
+
+  it('qualifies build costs, and drops a cost with unknown items', () => {
+    const { catalog, diagnostics } = buildCatalog([
+      base,
+      {
+        manifest: { id: 'costs', name: 'Costs', version: '1', dependsOn: ['base'] },
+        patch: {
+          machines: [
+            { id: 'base:Build_SmelterMk1_C', buildCost: [{ item: 'base:Desc_IronPlate_C', amount: 3 }] },
+            { id: 'base:Build_ConstructorMk1_C', buildCost: [{ item: 'Desc_Nope_C', amount: 1 }] },
+          ],
+        },
+      },
+    ])
+    expect(catalog.machines.get('base:Build_SmelterMk1_C')!.buildCost).toEqual([{ item: 'base:Desc_IronPlate_C', amount: 3 }])
+    expect(catalog.machines.get('base:Build_ConstructorMk1_C')!.buildCost).toBeUndefined()
+    expect(diagnostics.map((d) => d.id)).toEqual(['base:Build_ConstructorMk1_C'])
   })
 
   it('switches back to vanilla by leaving the mod out', () => {

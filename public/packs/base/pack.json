@@ -1207,6 +1207,20 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "Desc_IronPlateReinforced_C",
+      "amount": 8
+     },
+     {
+      "item": "Desc_Rotor_C",
+      "amount": 4
+     },
+     {
+      "item": "Desc_Cable_C",
+      "amount": 10
+     }
+    ],
     "amplifier": {
      "slots": 2,
      "boostPerSlot": 0.5,
@@ -1239,6 +1253,24 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "Desc_Computer_C",
+      "amount": 10
+     },
+     {
+      "item": "Desc_ModularFrameHeavy_C",
+      "amount": 10
+     },
+     {
+      "item": "Desc_Motor_C",
+      "amount": 20
+     },
+     {
+      "item": "Desc_AluminumCasing_C",
+      "amount": 50
+     }
+    ],
     "amplifier": {
      "slots": 4,
      "boostPerSlot": 0.25,
@@ -1271,6 +1303,16 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "Desc_IronPlateReinforced_C",
+      "amount": 2
+     },
+     {
+      "item": "Desc_Cable_C",
+      "amount": 8
+     }
+    ],
     "amplifier": {
      "slots": 1,
      "boostPerSlot": 1,
@@ -1303,6 +1345,24 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "Desc_ModularFrameFused_C",
+      "amount": 10
+     },
+     {
+      "item": "Desc_CoolingSystem_C",
+      "amount": 25
+     },
+     {
+      "item": "Desc_ModularFrameLightweight_C",
+      "amount": 50
+     },
+     {
+      "item": "Desc_SAMFluctuator_C",
+      "amount": 100
+     }
+    ],
     "amplifier": {
      "slots": 2,
      "boostPerSlot": 0.5,
@@ -1335,6 +1395,20 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "Desc_ModularFrame_C",
+      "amount": 10
+     },
+     {
+      "item": "Desc_Rotor_C",
+      "amount": 10
+     },
+     {
+      "item": "Desc_Cement_C",
+      "amount": 20
+     }
+    ],
     "amplifier": {
      "slots": 2,
      "boostPerSlot": 0.5,
@@ -1367,6 +1441,16 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "Desc_SteelPlate_C",
+      "amount": 10
+     },
+     {
+      "item": "Desc_AluminumCasing_C",
+      "amount": 10
+     }
+    ],
     "extraction": {
      "resources": [
       "Desc_LiquidOil_C",
@@ -1403,6 +1487,28 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "Desc_ModularFrameLightweight_C",
+      "amount": 10
+     },
+     {
+      "item": "Desc_ModularFrameHeavy_C",
+      "amount": 25
+     },
+     {
+      "item": "Desc_Motor_C",
+      "amount": 50
+     },
+     {
+      "item": "Desc_AluminumPlate_C",
+      "amount": 50
+     },
+     {
+      "item": "Desc_Rubber_C",
+      "amount": 100
+     }
+    ],
     "icon": "icons/Build_FrackingSmasher_C.png"
    },
    {
@@ -1429,6 +1535,20 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "Desc_IronPlate_C",
+      "amount": 15
+     },
+     {
+      "item": "Desc_IronRod_C",
+      "amount": 15
+     },
+     {
+      "item": "Desc_Wire_C",
+      "amount": 25
+     }
+    ],
     "generation": {
      "powerMw": 30
     },
@@ -1458,6 +1578,20 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "Desc_IronPlateReinforced_C",
+      "amount": 20
+     },
+     {
+      "item": "Desc_Rotor_C",
+      "amount": 10
+     },
+     {
+      "item": "Desc_Cable_C",
+      "amount": 30
+     }
+    ],
     "generation": {
      "powerMw": 75
     },
@@ -1487,6 +1621,28 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "Desc_Motor_C",
+      "amount": 15
+     },
+     {
+      "item": "Desc_SteelPlateReinforced_C",
+      "amount": 15
+     },
+     {
+      "item": "Desc_CopperSheet_C",
+      "amount": 30
+     },
+     {
+      "item": "Desc_Rubber_C",
+      "amount": 50
+     },
+     {
+      "item": "Desc_HighSpeedWire_C",
+      "amount": 50
+     }
+    ],
     "generation": {
      "powerMw": 250
     },
@@ -1516,6 +1672,28 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "Desc_ComputerSuper_C",
+      "amount": 10
+     },
+     {
+      "item": "Desc_ModularFrameHeavy_C",
+      "amount": 25
+     },
+     {
+      "item": "Desc_AluminumPlate_C",
+      "amount": 100
+     },
+     {
+      "item": "Desc_Cable_C",
+      "amount": 200
+     },
+     {
+      "item": "Desc_Cement_C",
+      "amount": 250
+     }
+    ],
     "generation": {
      "powerMw": 2500
     },
@@ -1545,6 +1723,28 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "Desc_MotorLightweight_C",
+      "amount": 10
+     },
+     {
+      "item": "Desc_ComputerSuper_C",
+      "amount": 10
+     },
+     {
+      "item": "Desc_ModularFrameFused_C",
+      "amount": 25
+     },
+     {
+      "item": "Desc_CoolingSystem_C",
+      "amount": 50
+     },
+     {
+      "item": "Desc_HighSpeedWire_C",
+      "amount": 500
+     }
+    ],
     "amplifier": {
      "slots": 4,
      "boostPerSlot": 0.25,
@@ -1577,6 +1777,24 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "Desc_Motor_C",
+      "amount": 10
+     },
+     {
+      "item": "Desc_ModularFrame_C",
+      "amount": 20
+     },
+     {
+      "item": "Desc_Plastic_C",
+      "amount": 50
+     },
+     {
+      "item": "Desc_Cable_C",
+      "amount": 50
+     }
+    ],
     "amplifier": {
      "slots": 4,
      "boostPerSlot": 0.25,
@@ -1609,6 +1827,20 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "BP_ItemDescriptorPortableMiner_C",
+      "amount": 1
+     },
+     {
+      "item": "Desc_IronPlate_C",
+      "amount": 10
+     },
+     {
+      "item": "Desc_Cement_C",
+      "amount": 10
+     }
+    ],
     "extraction": {
      "resources": [
       "Desc_OreIron_C",
@@ -1651,6 +1883,24 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "BP_ItemDescriptorPortableMiner_C",
+      "amount": 2
+     },
+     {
+      "item": "Desc_SteelPlateReinforced_C",
+      "amount": 10
+     },
+     {
+      "item": "Desc_SteelPipe_C",
+      "amount": 20
+     },
+     {
+      "item": "Desc_ModularFrame_C",
+      "amount": 10
+     }
+    ],
     "extraction": {
      "resources": [
       "Desc_OreIron_C",
@@ -1693,6 +1943,28 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "BP_ItemDescriptorPortableMiner_C",
+      "amount": 3
+     },
+     {
+      "item": "Desc_SteelPipe_C",
+      "amount": 50
+     },
+     {
+      "item": "Desc_ComputerSuper_C",
+      "amount": 5
+     },
+     {
+      "item": "Desc_ModularFrameFused_C",
+      "amount": 10
+     },
+     {
+      "item": "Desc_MotorLightweight_C",
+      "amount": 3
+     }
+    ],
     "extraction": {
      "resources": [
       "Desc_OreIron_C",
@@ -1735,6 +2007,20 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "Desc_Motor_C",
+      "amount": 15
+     },
+     {
+      "item": "Desc_SteelPlateReinforced_C",
+      "amount": 20
+     },
+     {
+      "item": "Desc_Cable_C",
+      "amount": 60
+     }
+    ],
     "extraction": {
      "resources": [
       "Desc_LiquidOil_C"
@@ -1768,6 +2054,24 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "Desc_Motor_C",
+      "amount": 10
+     },
+     {
+      "item": "Desc_SteelPlateReinforced_C",
+      "amount": 10
+     },
+     {
+      "item": "Desc_SteelPipe_C",
+      "amount": 30
+     },
+     {
+      "item": "Desc_CopperSheet_C",
+      "amount": 20
+     }
+    ],
     "amplifier": {
      "slots": 2,
      "boostPerSlot": 0.5,
@@ -1800,6 +2104,20 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "Desc_SteelPlate_C",
+      "amount": 20
+     },
+     {
+      "item": "Desc_Rubber_C",
+      "amount": 10
+     },
+     {
+      "item": "Desc_Plastic_C",
+      "amount": 10
+     }
+    ],
     "icon": "icons/Build_Packager_C.png"
    },
    {
@@ -1826,6 +2144,28 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "Desc_MotorLightweight_C",
+      "amount": 20
+     },
+     {
+      "item": "Desc_ComputerSuper_C",
+      "amount": 20
+     },
+     {
+      "item": "Desc_CoolingSystem_C",
+      "amount": 50
+     },
+     {
+      "item": "Desc_TimeCrystal_C",
+      "amount": 50
+     },
+     {
+      "item": "Desc_FicsiteMesh_C",
+      "amount": 100
+     }
+    ],
     "amplifier": {
      "slots": 4,
      "boostPerSlot": 0.25,
@@ -1858,6 +2198,16 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "Desc_IronRod_C",
+      "amount": 5
+     },
+     {
+      "item": "Desc_Wire_C",
+      "amount": 8
+     }
+    ],
     "amplifier": {
      "slots": 1,
      "boostPerSlot": 1,
@@ -1890,6 +2240,20 @@
      "perShard": 0.5,
      "item": "Desc_CrystalShard_C"
     },
+    "buildCost": [
+     {
+      "item": "Desc_CopperSheet_C",
+      "amount": 20
+     },
+     {
+      "item": "Desc_IronPlateReinforced_C",
+      "amount": 10
+     },
+     {
+      "item": "Desc_Rotor_C",
+      "amount": 10
+     }
+    ],
     "extraction": {
      "resources": [
       "Desc_Water_C"

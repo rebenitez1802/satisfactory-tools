@@ -5,6 +5,7 @@ import { useState, type ReactNode } from 'react'
 import type { Catalog } from '../../catalog'
 import {
   defaultPurity,
+  doneShortfall,
   maxClock,
   openInputs,
   minClock,
@@ -34,6 +35,8 @@ export interface InspectorActions {
   duplicate: (ids: string[]) => void
   /** ⚡ Build chain for every input of the node that has no belt. */
   buildChain: (id: string) => void
+  /** Build checklist: mark nodes done with the machines they need now, or clear the mark. */
+  markDone: (ids: string[], done: boolean) => void
 }
 
 interface InspectorProps {
@@ -83,9 +86,26 @@ export function Inspector({ plan, result, catalog, selection, actions, isRecipeH
     )
   }
   if (selection.nodes.length > 1) {
+    const picked = plan.nodes.filter((n) => selection.nodes.includes(n.id))
+    const done = picked.filter((n) => n.done && !doneShortfall(n, result.nodes.get(n.id))).length
     return (
       <aside className="pn-inspector">
         <h3>{selection.nodes.length} nodes selected</h3>
+        <Field label="Build checklist" hint={`${done} of ${picked.length} done.`}>
+          <div className="pn-insp-row">
+            <button type="button" className="pn-button pn-button-quiet pn-button-inline" disabled={done === picked.length} onClick={() => actions.markDone(selection.nodes, true)}>
+              ✓ Mark done
+            </button>
+            <button
+              type="button"
+              className="pn-button pn-button-quiet pn-button-inline"
+              disabled={picked.every((n) => !n.done)}
+              onClick={() => actions.markDone(selection.nodes, false)}
+            >
+              Not done
+            </button>
+          </div>
+        </Field>
         <div className="pn-insp-actions">
           <button type="button" className="pn-button pn-button-quiet" onClick={() => actions.duplicate(selection.nodes)}>
             Duplicate
@@ -173,6 +193,7 @@ function NodeInspector({
           </span>
         </div>
       )}
+      {res?.resolved && <DoneField node={node} res={res} actions={actions} />}
       {node.kind === 'recipe' && (
         <RecipeFields node={node} res={res} catalog={catalog} actions={actions} isRecipeHidden={isRecipeHidden} mode={mode} compare={compare} />
       )}
@@ -224,6 +245,42 @@ function NodeInspector({
         </button>
       </div>
     </>
+  )
+}
+
+/** Build checklist: a done mark, and what to do when the plan outgrew it. */
+function DoneField({ node, res, actions }: { node: PlanNode; res: NodeResult; actions: InspectorActions }) {
+  const behind = doneShortfall(node, res)
+  const done = !!node.done && !behind
+  return (
+    <Field
+      label="Build checklist"
+      hint={
+        behind
+          ? undefined
+          : done
+            ? `Done${node.done!.count ? `, with ${node.done!.count} built` : ''}. Its cost is left out of "still needed".`
+            : 'Tick it once this node is built in the game.'
+      }
+    >
+      <label className="pn-toggle">
+        <input type="checkbox" checked={done} onChange={(e) => actions.markDone([node.id], e.target.checked)} />
+        <span className="pn-toggle-track" />
+        <span>{behind ? `All ${behind.needs} built` : 'Done'}</span>
+      </label>
+      {behind && (
+        <>
+          <span className="pn-insp-hint">
+            <span className="pn-warn">
+              Marked done with {behind.built}, but the plan now needs {behind.needs}: {behind.needs - behind.built} more to build.
+            </span>
+          </span>
+          <button type="button" className="pn-link" onClick={() => actions.markDone([node.id], false)}>
+            Clear the mark
+          </button>
+        </>
+      )}
+    </Field>
   )
 }
 

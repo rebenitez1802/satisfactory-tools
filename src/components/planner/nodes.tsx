@@ -3,13 +3,15 @@
 // output items down the right edge, each with its connection handle
 // (`in:<itemId>` / `out:<itemId>`) so belts only join matching items. Rates
 // live on the belts, or under the item while a port has no belt yet;
-// everything else is in the hover tooltip and the inspector.
+// everything else is in the hover tooltip and the inspector. The ✓ in the
+// top-left corner is the build checklist: done cards fade so what's left
+// stands out.
 
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react'
 import type { ReactNode } from 'react'
 import type { Item, ItemId } from '../../catalog'
 import type { ExtractorNode, GoalNode, InputPort, NodeResult, OutputPort, PlanNode, RecipeNode, SupplyNode } from '../../planner'
-import { sloopSlots } from '../../planner'
+import { doneShortfall, sloopSlots } from '../../planner'
 import { fmt, mw, pct } from './format'
 import { Icon } from './Icon'
 import { usePlanner } from './plannerContext'
@@ -84,8 +86,40 @@ function OutPort({ nodeId, port, capacity }: { nodeId: string; port: OutputPort;
   )
 }
 
+/**
+ * Build checklist toggle. Hidden until hover on a card not marked; green when
+ * done; amber when the plan needs more machines than were marked done, and
+ * then a click marks them all built.
+ */
+function DoneCheck({ node, res }: { node: PlanNode; res: NodeResult }) {
+  const { markDone } = usePlanner()
+  const behind = doneShortfall(node, res)
+  const done = !!node.done && !behind
+  const tip = behind
+    ? `Marked done with ${behind.built}, now needs ${behind.needs}: click once all ${behind.needs} are built`
+    : done
+      ? 'Done: click to unmark'
+      : 'Mark done once it is built in the game'
+  return (
+    <button
+      type="button"
+      className={`pn-check nodrag${done ? ' pn-check-done' : ''}${behind ? ' pn-check-behind' : ''}`}
+      title={tip}
+      aria-label={tip}
+      aria-pressed={done}
+      onClick={(e) => {
+        e.stopPropagation()
+        markDone([node.id], !done)
+      }}
+    >
+      ✓{behind && <span>{behind.built}/{behind.needs}</span>}
+    </button>
+  )
+}
+
 /** The shared card frame: ports on the sides, a center block, corner badges. */
 function Card({
+  node,
   res,
   selected,
   kind,
@@ -94,6 +128,7 @@ function Card({
   children,
   tint,
 }: {
+  node: PlanNode
   res: NodeResult | undefined
   selected: boolean
   kind: string
@@ -102,9 +137,12 @@ function Card({
   children: ReactNode
   tint?: 'good' | 'bad'
 }) {
+  const behind = res && doneShortfall(node, res)
   const cls = [
     'pn-card',
     `pn-${kind}`,
+    node.done && !behind && 'pn-done',
+    behind && 'pn-behind',
     selected && 'selected',
     res?.bottleneck && 'pn-bottleneck',
     res && !res.resolved && 'pn-unresolved',
@@ -120,6 +158,7 @@ function Card({
         {res?.outputs.map((p) => <OutPort key={p.item} nodeId={res.id} port={p} capacity={res.limit !== undefined ? res.capacity : undefined} />)}
       </div>
       {badges && <div className="pn-badges">{badges}</div>}
+      {res?.resolved && <DoneCheck node={node} res={res} />}
     </div>
   )
 }
@@ -175,6 +214,7 @@ function RecipeCard({ data, selected }: NodeProps<PlanFlowNode>) {
 
   return (
     <Card
+      node={node}
       res={res}
       selected={selected}
       kind={made !== undefined ? 'recipe pn-generator' : 'recipe'}
@@ -257,7 +297,7 @@ function ExtractorCard({ data, selected }: NodeProps<PlanFlowNode>) {
     .join('\n')
 
   return (
-    <Card res={res} selected={selected} kind="extractor" tip={tip} badges={<LimitBadge on={node.limited} />}>
+    <Card node={node} res={res} selected={selected} kind="extractor" tip={tip} badges={<LimitBadge on={node.limited} />}>
       <Icon of={machine} size={48} title={tip} />
       <span className="pn-big">
         {fmt(node.limited ? capacity : res.activity)}
@@ -281,7 +321,7 @@ function SupplyCard({ data, selected }: NodeProps<PlanFlowNode>) {
     : `${item.name} supply: bring in ${fmt(res.activity)}${unit(item)}`
 
   return (
-    <Card res={res} selected={selected} kind="supply" tip={tip} badges={<LimitBadge on={node.limited} />}>
+    <Card node={node} res={res} selected={selected} kind="supply" tip={tip} badges={<LimitBadge on={node.limited} />}>
       <Icon of={item} size={44} title={tip} />
       <span className="pn-big">
         {fmt(node.limited ? node.perMin : res.activity)}
@@ -307,7 +347,7 @@ function GoalCard({ data, selected }: NodeProps<PlanFlowNode>) {
     : `${item.name} goal: ${fmt(goal.achieved)} of ${fmt(node.target as number)}${unit(item)}${short ? ` (${pct(goal.achieved / (node.target as number))})` : ''}`
 
   return (
-    <Card res={res} selected={selected} kind="goal" tip={tip} tint={short || goal.achieved <= EPS ? 'bad' : 'good'}>
+    <Card node={node} res={res} selected={selected} kind="goal" tip={tip} tint={short || goal.achieved <= EPS ? 'bad' : 'good'}>
       <Icon of={item} size={44} title={tip} />
       <span className="pn-big">{fmt(goal.achieved)}</span>
       <span className="pn-small">{isMax ? 'max' : `of ${fmt(node.target as number)}`}</span>

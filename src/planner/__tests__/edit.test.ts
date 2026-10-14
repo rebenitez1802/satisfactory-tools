@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { connectPorts, copyNodes, duplicateNodes, pasteClip, removeEdges, retargetEdges, pruneEdges, removeNodes, sameProductRecipes, setRecipe, updateNode, validatePlan } from '../edit'
+import { connectPorts, copyNodes, duplicateNodes, markDone, pasteClip, removeEdges, retargetEdges, pruneEdges, removeNodes, sameProductRecipes, setRecipe, updateNode, validatePlan } from '../edit'
 import { catalog, extractorNode, goalNode, plan, recipeNode } from './fixtures'
 
 const chain = () =>
@@ -107,5 +107,39 @@ describe('plan edits', () => {
     const bad = chain()
     bad.edges.push({ id: 'x', source: 'nope', target: 'goal', item: 'base:Desc_IronPlate_C' })
     expect(validatePlan(bad)).toBe('Plan has an invalid connection.')
+  })
+})
+
+describe('build checklist marks', () => {
+  const doneOf = (p: ReturnType<typeof chain>, id: string) => p.nodes.find((n) => n.id === id)!.done
+
+  it('marks nodes done with their machine count, and clears the mark', () => {
+    const p = markDone(chain(), ['smelt', 'plate'], (id) => (id === 'smelt' ? 4 : 2))
+    expect(doneOf(p, 'smelt')).toEqual({ count: 4 })
+    expect(doneOf(p, 'plate')).toEqual({ count: 2 })
+    expect(doneOf(p, 'ore')).toBeUndefined()
+    const cleared = markDone(p, ['smelt'], false)
+    expect(doneOf(cleared, 'smelt')).toBeUndefined()
+    expect('done' in cleared.nodes.find((n) => n.id === 'smelt')!).toBe(false)
+    expect(doneOf(cleared, 'plate')).toEqual({ count: 2 })
+  })
+
+  it('copies start not done', () => {
+    const p = markDone(chain(), ['smelt', 'plate'], () => 1)
+    let n = 0
+    const pasted = pasteClip(p, copyNodes(p, ['smelt', 'plate']), () => `new${n++}`)
+    expect(pasted.plan.nodes.filter((x) => pasted.ids.includes(x.id)).map((x) => x.done)).toEqual([undefined, undefined])
+    expect(doneOf(pasted.plan, 'smelt')).toEqual({ count: 1 })
+    const dup = duplicateNodes(p, ['plate'], () => 'dup')
+    expect(doneOf(dup, 'dup')).toBeUndefined()
+  })
+
+  it('a new recipe, machine or resource clears the mark; other edits keep it', () => {
+    const p = markDone(chain(), ['ore', 'smelt', 'plate'], () => 2)
+    expect(doneOf(updateNode(p, 'smelt', { clock: 0.5, label: 'Smelters' }, catalog), 'smelt')).toEqual({ count: 2 })
+    expect(doneOf(updateNode(p, 'smelt', { recipe: 'base:Recipe_IngotIron_C' }, catalog), 'smelt')).toEqual({ count: 2 })
+    expect(doneOf(setRecipe(p, 'smelt', 'base:Recipe_Alternate_PureIronIngot_C', catalog), 'smelt')).toBeUndefined()
+    expect(doneOf(updateNode(p, 'ore', { machine: 'base:Build_MinerMk2_C' }, catalog), 'ore')).toBeUndefined()
+    expect(doneOf(updateNode(p, 'ore', { resource: 'base:Desc_OreCopper_C' }, catalog), 'ore')).toBeUndefined()
   })
 })
