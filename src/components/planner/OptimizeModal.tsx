@@ -23,7 +23,7 @@ export function OptimizeModal({
   result,
   catalog,
   isRecipeHidden,
-  alternates,
+  recipes,
   objective,
   onObjective,
   onAvoid,
@@ -34,8 +34,8 @@ export function OptimizeModal({
   result: SolveResult
   catalog: Catalog
   isRecipeHidden: (id: string) => boolean
-  /** e.g. "12 of 111 unlocked" */
-  alternates: string
+  /** e.g. "Tier 5 · 180 of 293 usable" */
+  recipes: string
   objective: Objective
   onObjective: (objective: Objective) => void
   /** The plan's "Don't use" list. */
@@ -59,7 +59,7 @@ export function OptimizeModal({
           <div>
             <h3>✨ Optimize plan</h3>
             <p className="pn-dim">
-              Picks the recipes for this plan's goals from the standard ones and the alternates you've unlocked ({alternates}). Goals,
+              Picks the recipes for this plan's goals from the ones you can use ({recipes}). Goals,
               sources, generators and ⛔ limited groups stay; the other machine groups are rebuilt.
             </p>
           </div>

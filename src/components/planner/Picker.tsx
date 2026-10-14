@@ -12,7 +12,7 @@ interface PickerProps {
   options?: PickOption[]
   /** Top-left corner, in pixels relative to the canvas. */
   at: { x: number; y: number }
-  /** Recipes to leave out of palette results (locked alternates). */
+  /** Recipes to leave out of palette results (locked, or not unlocked yet). */
   hide?: (recipeId: string) => boolean
   /** A one-click action listed first, above the options (⚡ Build chain). Hidden while filtering. */
   action?: { title: string; detail: string; onRun: () => void }

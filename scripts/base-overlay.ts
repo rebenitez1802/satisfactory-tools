@@ -149,3 +149,22 @@ export const WORLD: WorldMap = {
     counts.flatMap((count, i) => (count > 0 ? [{ resource, site, purity: PURITIES[i].id, count }] : [])),
   ),
 }
+
+/**
+ * MAM research trees, by the part of a research class name after
+ * `Research_` (Research_Caterium_1_C). greeny has no tree names, and the
+ * alien trees use several prefixes.
+ */
+export const RESEARCH_TREES: Record<string, string> = {
+  Caterium: 'Caterium',
+  Quartz: 'Quartz',
+  Sulfur: 'Sulfur',
+  Mycelia: 'Mycelia',
+  Nutrients: 'Nutrients',
+  PowerSlugs: 'Power Slugs',
+  Alien: 'Alien Technology',
+  AO: 'Alien Organisms',
+  AOrgans: 'Alien Organisms',
+  AOrganisms: 'Alien Organisms',
+  ACarapace: 'Alien Organisms',
+}

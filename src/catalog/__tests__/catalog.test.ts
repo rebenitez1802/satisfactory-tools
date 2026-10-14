@@ -112,6 +112,17 @@ describe('base pack', () => {
     expect(waste.sinkPoints).toBeUndefined()
   })
 
+  it('knows what unlocks every recipe', () => {
+    for (const id of catalog.recipes.keys()) expect(catalog.schematicsFor.get(id)?.length, id).toBeGreaterThan(0)
+    const s = (id: string) => catalog.schematics.get(`base:${id}`)!
+    expect(s('Schematic_5-1_C')).toMatchObject({ name: 'Oil Processing', kind: 'milestone', tier: 5 })
+    expect(s('Research_Caterium_2_C')).toMatchObject({ name: 'Quickwire', kind: 'research', group: 'Caterium' })
+    expect(s('Schematic_Alternate_PureIronIngot_C')).toMatchObject({ kind: 'alternate', requires: ['base:Schematic_5-1_C'] })
+    // Recipes no schematic lists come with their building: unpackaging with the Packager.
+    expect(catalog.schematicsFor.get('base:Recipe_UnpackageWater_C')).toEqual(['base:Schematic_5-4_C'])
+    expect(catalog.schematicsFor.get('base:Recipe_GeneratorCoal_Coal_C')).toEqual(['base:Schematic_3-1_C'])
+  })
+
   it('names the items that go in shard and Somersloop slots', () => {
     const assembler = catalog.machines.get('base:Build_AssemblerMk1_C')!
     expect(assembler.overclock?.item).toBe('base:Desc_CrystalShard_C')
@@ -216,6 +227,25 @@ describe('pack merging', () => {
     expect(catalog.machines.get('base:Build_SmelterMk1_C')!.buildCost).toEqual([{ item: 'base:Desc_IronPlate_C', amount: 3 }])
     expect(catalog.machines.get('base:Build_ConstructorMk1_C')!.buildCost).toBeUndefined()
     expect(diagnostics.map((d) => d.id)).toEqual(['base:Build_ConstructorMk1_C'])
+  })
+
+  it('merges schematics, indexed by recipe, and forgets removed recipes', () => {
+    const { catalog, diagnostics } = buildCatalog([
+      base,
+      mod,
+      {
+        manifest: { id: 'gears', name: 'Gears', version: '1', dependsOn: ['base', 'mymod'] },
+        add: { schematics: [{ id: 'Schematic_Gears_C', name: 'Gears', kind: 'milestone', tier: 2, recipes: ['mymod:Recipe_Gear_C'], requires: ['base:Schematic_2-1_C', 'Nope_C'] }] },
+      },
+    ])
+    expect(diagnostics).toEqual([])
+    const gears = catalog.schematics.get('gears:Schematic_Gears_C')!
+    expect(gears.recipes).toEqual(['mymod:Recipe_Gear_C'])
+    expect(gears.requires).toEqual(['base:Schematic_2-1_C'])
+    expect(catalog.schematicsFor.get('mymod:Recipe_Gear_C')).toEqual(['gears:Schematic_Gears_C'])
+    expect(catalog.schematicsFor.get('base:Recipe_Plastic_C')).toEqual(['base:Schematic_5-1_C'])
+    // mymod removes Pure Iron Ingot: its hard drive unlocks nothing now.
+    expect(catalog.schematics.get('base:Schematic_Alternate_PureIronIngot_C')!.recipes).toEqual([])
   })
 
   it('switches back to vanilla by leaving the mod out', () => {

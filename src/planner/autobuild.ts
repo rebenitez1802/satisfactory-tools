@@ -35,7 +35,7 @@ import type { Plan, PlanNode } from './types'
 export interface BuildOptions {
   /** Fresh node ids. */
   newId: () => string
-  /** Recipes the player hasn't unlocked (locked alternates). */
+  /** Recipes the player can't use (not unlocked yet, or locked by hand). */
   isRecipeHidden?: (id: RecipeId) => boolean
   /** The player's remembered recipe per item, tried before the standard one. */
   preferred?: Readonly<Record<ItemId, RecipeId>>

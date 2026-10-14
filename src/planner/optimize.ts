@@ -57,7 +57,7 @@ export type Objective = 'resources' | 'power' | 'buildings'
 
 export interface OptimizeOptions {
   objective?: Objective
-  /** Recipes the player hasn't unlocked (locked alternates): never picked. */
+  /** Recipes the player can't use (not unlocked yet, or locked by hand): never picked. */
   isRecipeHidden?: (id: RecipeId) => boolean
   /** Fresh node ids. */
   newId: () => string
@@ -442,10 +442,20 @@ export function optimize(plan: Plan, catalog: Catalog, opts: OptimizeOptions): O
   })
   built.plan = topped.plan
   built.added.push(...extraGroups, ...topped.added)
+  // Items the game makes, but not with any recipe the player can use yet.
+  const imported = built.plan.nodes.flatMap((n) =>
+    n.kind === 'supply' && built.added.includes(n.id) && (catalog.recipesProducing.get(n.item) ?? []).some((id) => !isGenerator(catalog, catalog.recipes.get(id)!))
+      ? [catalog.items.get(n.item)?.name ?? n.item]
+      : [],
+  )
+  const notes = [
+    scale < 1 - 1e-6 ? `The limits allow ${Math.round(scale * 100)}% of the 🎯 targets; the plan is built for that.` : '',
+    imported.length ? `No recipe you can use makes ${[...new Set(imported)].join(', ')}, so it comes from a supply node.` : '',
+  ].filter(Boolean)
   return {
     ok: true,
     scale: targets.length ? Math.min(1, scale / (1 - 1e-9)) : 1,
-    message: scale < 1 - 1e-6 ? `The limits allow ${Math.round(scale * 100)}% of the 🎯 targets; the plan is built for that.` : undefined,
+    message: notes.join(' ') || undefined,
     plan: built.plan,
     added: built.added,
     removed,

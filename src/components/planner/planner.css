@@ -707,9 +707,12 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Alternates dialog */
+/* Recipes dialog */
 .pn-modal-narrow {
   width: min(560px, 92vw);
+}
+.pn-modal.pn-recipes {
+  width: min(640px, 94vw);
 }
 .pn-alt-toolbar {
   display: flex;
@@ -739,6 +742,76 @@
 }
 .pn-alt-name {
   flex: 1;
+}
+.pn-alt-why {
+  font-size: 11.5px;
+  text-align: right;
+}
+.pn-alt-row.pn-gated {
+  cursor: default;
+}
+.pn-alt-row.pn-gated .icon,
+.pn-alt-row.pn-gated .pn-alt-name {
+  opacity: 0.45;
+}
+.pn-alt-toolbar .seg {
+  flex: none;
+}
+.pn-unlocks {
+  flex: none;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.pn-unlocks-tier {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}
+.pn-unlocks-tier select {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.pn-unlocks-hint {
+  margin: 8px 0 0;
+}
+.pn-unlocks-research {
+  margin-top: 8px;
+}
+.pn-unlocks-research summary {
+  cursor: pointer;
+  color: var(--text-dim);
+}
+.pn-unlocks-research[open] {
+  max-height: 34vh;
+  overflow-y: auto;
+}
+.pn-unlocks-tree {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 4px 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+}
+.pn-unlocks-tree:first-of-type {
+  margin-top: 6px;
+}
+.pn-unlocks-tree label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+.pn-unlocks-tree-name {
+  align-self: start;
+  font-weight: 600;
+}
+.pn-unlocks-nodes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
 }
 
 .pn-unit {

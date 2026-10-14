@@ -10,7 +10,7 @@
 
 import { ENTITY_KINDS } from './pack'
 import type { DataPack, EntityKind, PackEntities } from './pack'
-import type { Catalog, Id, ItemId, Machine, MachineId, PackInfo, Recipe, RecipeId, WorldMap } from './types'
+import type { Catalog, Id, ItemId, Machine, MachineId, PackInfo, Recipe, RecipeId, Schematic, SchematicId, WorldMap } from './types'
 
 export interface Diagnostic {
   severity: 'error' | 'warning'
@@ -88,6 +88,10 @@ function qualifyEntity<K extends EntityKind>(
   } else if (kind === 'maps') {
     const w = entity as Partial<WorldMap>
     if (w.sites) out.sites = w.sites.map((s) => ({ ...s, resource: qualify(s.resource, packId), purity: qualify(s.purity, packId) }))
+  } else if (kind === 'schematics') {
+    const sc = entity as Partial<Schematic>
+    if (sc.recipes) out.recipes = sc.recipes.map((r) => qualify(r, packId))
+    if (sc.requires) out.requires = sc.requires.map((r) => qualify(r, packId))
   }
   return out as Partial<PackEntities[K]>
 }
@@ -165,6 +169,7 @@ export function buildCatalog(packs: DataPack[], opts: BuildOptions = {}): BuildR
     purities: new Map(),
     transportTiers: new Map(),
     maps: new Map(),
+    schematics: new Map(),
   }
 
   for (const pack of order) {
@@ -217,6 +222,7 @@ export function buildCatalog(packs: DataPack[], opts: BuildOptions = {}): BuildR
   }
 
   validateReferences(store, diagnostics)
+  validateSchematics(store)
 
   const packInfos: PackInfo[] = order.map(({ manifest: m }) => ({ id: m.id, name: m.name, version: m.version }))
   return { catalog: indexCatalog(store, packInfos), diagnostics }
@@ -280,6 +286,19 @@ function validateReferences(store: Store, diagnostics: Diagnostic[]) {
   }
 }
 
+/**
+ * Schematics: forget recipes and requirements that aren't loaded. That's
+ * normal (a mod removing a recipe), so it's silent: the recipe just isn't
+ * unlocked by anything. Runs after recipes are checked.
+ */
+function validateSchematics(store: Store) {
+  for (const [id, sc] of store.schematics) {
+    const recipes = (sc.recipes ?? []).filter((r) => store.recipes.has(r))
+    const requires = (sc.requires ?? []).filter((r) => store.schematics.has(r))
+    store.schematics.set(id, { ...sc, recipes, ...(sc.requires ? { requires } : {}) })
+  }
+}
+
 function pushTo<K, V>(map: Map<K, V[]>, key: K, value: V) {
   const list = map.get(key)
   if (list) {
@@ -298,6 +317,8 @@ function indexCatalog(store: Store, packs: PackInfo[]): Catalog {
   for (const m of store.machines.values()) {
     for (const res of m.extraction?.resources ?? []) pushTo(extractorsFor, res, m.id)
   }
+  const schematicsFor = new Map<RecipeId, SchematicId[]>()
+  for (const sc of store.schematics.values()) for (const r of sc.recipes) pushTo(schematicsFor, r, sc.id)
   return {
     packs,
     items: store.items,
@@ -306,6 +327,8 @@ function indexCatalog(store: Store, packs: PackInfo[]): Catalog {
     purities: store.purities,
     transportTiers: store.transportTiers,
     maps: store.maps,
+    schematics: store.schematics,
+    schematicsFor,
     recipesProducing,
     recipesConsuming,
     extractorsFor,

@@ -45,7 +45,7 @@ interface InspectorProps {
   catalog: Catalog
   selection: { nodes: string[]; edges: string[] }
   actions: InspectorActions
-  /** Recipes hidden from pickers (locked alternates); still shown when already in use. */
+  /** Recipes hidden from pickers (locked, or not unlocked yet); still shown when already in use. */
   isRecipeHidden: (id: string) => boolean
   /** Whether the recipe dropdown compares options at the node's rate rather than per machine (a preference). */
   compare: RecipeCompare
