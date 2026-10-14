@@ -20,6 +20,7 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | 3 | [Compare recipes at this node's rate](#3-compare-recipes-at-this-nodes-rate) | M1 | High | S | Next |
 | 4 | [Belt counts instead of red edges](#4-belt-counts-instead-of-red-edges) | M1 | Medium | XS–S | Next |
 | 5 | [Better default zoom](#5-better-default-zoom) | M1 | Low–Med | XS | Done (PR #5) |
+| — | [Rates on unconnected ports](#quick-win-rates-on-unconnected-ports) | M1 | Medium | XS | Done (PR #5) |
 | 6 | [Optimizer](#6-optimizer-mode-3) | M2 | Very high | L | Planned |
 | 7 | [Split shares on outputs](#7-split-shares-on-outputs) | M2 | Medium | S–M | Planned |
 | 8 | [Generators and net power](#8-generators-and-net-power) | M2 | Med–High | M | Planned |
@@ -179,7 +180,9 @@ groups, so 240/min on Mk.2 really means "2 belts". **Effort:** XS–S.
 ### 5. Better default zoom
 
 **Done** (shipped with #1). Its behaviour is in
-[production-planner.md](production-planner.md#interaction) ("Zoom").
+[production-planner.md](production-planner.md#interaction) ("Zoom"). The
+user chose to keep a plan that's too big centered, and to stop zooming out
+by hand at 30% (`MIN_ZOOM`).
 
 **Value:** cards are hard to read on wide plans. **Effort:** XS.
 
@@ -187,6 +190,19 @@ groups, so 240/min on Mk.2 really means "2 belts". **Effort:** XS–S.
   scrolling is fine.
 - Add "Zoom to selection": the F key, or a button.
 - In `PlanCanvas.tsx`, see `FIT_VIEW`.
+
+### Quick win: rates on unconnected ports
+
+**Done** (shipped with #1, requested by the user). A port with no belt yet
+shows its rate under the item: red for what an input needs, amber for what an
+output makes. A newly added miner shows what it gives without hovering. The
+rules are in [production-planner.md](production-planner.md#presentation)
+("Ports").
+
+- The solver used to report an open end's output as connected, because of
+  its hidden implicit-goal belt. It now reports `connected: false`; `used`
+  still includes that flow.
+- If #4 adds belt counts, unconnected ports could show them too.
 
 ---
 
