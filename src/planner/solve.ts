@@ -33,8 +33,11 @@
 // A byproduct belt that loops back into its maker's own chain (aluminum
 // scrap's water piped to the Alumina Solution that feeds it) can't be cut
 // into a later stage, but pulling it makes the loop run away: more water
-// wanted, more scrap made, more alumina needed, more water wanted. So it
-// stays in the stage as a *spare* belt: it doesn't pull, it carries what the
+// wanted, more scrap made, more alumina needed, more water wanted. Nor can
+// one whose consumer leads on to the anchor its maker runs for (alumina's
+// silica going to the Aluminum Ingot the alumina is for): cut, the anchor
+// would sit in a later stage, and the maker's own stage would make nothing.
+// So both stay in the stage as *spare* belts: it doesn't pull, it carries what the
 // maker makes, used first, and the other producers make up the rest. When
 // nothing else feeds that input, the rest is reported as missing, like an
 // unconnected input. With spare belts left out, the pulled part of the loop
@@ -543,14 +546,19 @@ function splitStages(g: Graph): { stages: Stage[]; cross: PlanEdge[]; spare: Set
   // down its main products; otherwise the consumer's demand is what runs the
   // maker. Belts that loop back into their maker's own chain stay in its
   // stage, as spare belts.
+  // A belt whose consumer leads on to an anchor its maker runs for stays in
+  // the maker's stage too: cut, that anchor would end up in a later stage,
+  // leaving the maker's stage nothing to run for.
   const feeders = new Map<string, string[]>()
   for (const e of g.edges) if (!byproduct(e)) pushTo(feeders, e.target, e.source)
-  const runsFor = reachable(ids.filter((id) => g.units.get(id)!.anchor !== undefined), feeders)
+  const anchorsOf = new Map<string, string[]>()
+  for (const a of ids.filter((id) => g.units.get(id)!.anchor !== undefined)) for (const id of reachable([a], feeders)) pushTo(anchorsOf, id, a)
   const cross: PlanEdge[] = []
   const spare = new Set<string>()
   for (const e of g.edges) {
-    if (!byproduct(e) || !runsFor.has(e.source)) continue
-    if (reachable([e.target], downstream).has(e.source)) spare.add(e.id)
+    if (!byproduct(e) || !anchorsOf.has(e.source)) continue
+    const down = reachable([e.target], downstream)
+    if (down.has(e.source) || anchorsOf.get(e.source)!.some((a) => down.has(a))) spare.add(e.id)
     else cross.push(e)
   }
   const cut = new Set(cross)

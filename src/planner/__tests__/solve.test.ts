@@ -890,3 +890,52 @@ describe('byproduct loops', () => {
     expect(r.diagnostics.map((d) => d.message)).toEqual([expect.stringContaining('Dark Matter Residue is 20 m³/min short')])
   })
 })
+
+describe('byproducts feeding their maker\'s own goal', () => {
+  // Alumina Solution makes silica as a byproduct, and the Aluminum Ingot the
+  // alumina is for takes silica: the belt stays in the alumina's stage.
+  // 60 ingots: 1 foundry (90 scrap, 75 silica), 0.25 scrap refineries,
+  // 0.5 alumina refineries (25 silica).
+  const ingots = (quartz: boolean) =>
+    solvePlan(
+      plan(
+        [
+          supplyNode('bx', 'Desc_OreBauxite_C', 0, false),
+          supplyNode('w', 'Desc_Water_C', 0, false),
+          supplyNode('c', 'Desc_Coal_C', 0, false),
+          recipeNode('alu', 'Recipe_AluminaSolution_C', REFINERY),
+          recipeNode('scrap', 'Recipe_AluminumScrap_C', REFINERY),
+          recipeNode('ing', 'Recipe_IngotAluminum_C', 'Build_FoundryMk1_C'),
+          goalNode('g', 'Desc_AluminumIngot_C', 60),
+          ...(quartz ? [supplyNode('q', 'Desc_RawQuartz_C', 0, false), recipeNode('sil', 'Recipe_Silica_C', 'Build_ConstructorMk1_C')] : []),
+        ],
+        [
+          ['bx', 'alu', 'Desc_OreBauxite_C'],
+          ['w', 'alu', 'Desc_Water_C'],
+          ['alu', 'scrap', 'Desc_AluminaSolution_C'],
+          ['c', 'scrap', 'Desc_Coal_C'],
+          ['scrap', 'ing', 'Desc_AluminumScrap_C'],
+          ['alu', 'ing', 'Desc_Silica_C'],
+          ['ing', 'g', 'Desc_AluminumIngot_C'],
+          ...(quartz ? ([['q', 'sil', 'Desc_RawQuartz_C'], ['sil', 'ing', 'Desc_Silica_C']] as [string, string, string][]) : []),
+        ],
+      ),
+      catalog,
+    )
+
+  it('is used first, and another producer makes the rest', () => {
+    const r = ingots(true)
+    expect(r.goals[0].achieved).toBeCloseTo(60)
+    expect(r.edges.get('e5')!.perMin).toBeCloseTo(25)
+    expect(r.nodes.get('sil')!.activity).toBeCloseTo(50 / 37.5)
+    expect(r.nodes.get('q')!.activity).toBeCloseTo(30)
+    expect(r.diagnostics).toEqual([])
+  })
+
+  it('reports the rest as missing when nothing else makes it, instead of making nothing', () => {
+    const r = ingots(false)
+    expect(r.goals[0].achieved).toBeCloseTo(60)
+    expect(r.totals.missingInputs).toEqual([{ item: 'base:Desc_Silica_C', perMin: expect.closeTo(50) }])
+    expect(r.diagnostics.map((d) => d.message)).toEqual([expect.stringContaining('Silica is 50/min short')])
+  })
+})
