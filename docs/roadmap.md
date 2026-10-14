@@ -16,7 +16,7 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | # | Item | Milestone | Value | Effort | Status |
 |---|---|---|---|---|---|
 | 1 | [Auto-layout](#1-auto-layout) | M1 | High | S | Done (PR #5) |
-| 2 | [Auto-build upstream](#2-auto-build-upstream-mode-2) | M1 | Very high | M | Done |
+| 2 | [Auto-build upstream](#2-auto-build-upstream-mode-2) | M1 | Very high | M | Done (PR #9) |
 | 3 | [Compare recipes at this node's rate](#3-compare-recipes-at-this-nodes-rate) | M1 | High | S | Next |
 | 4 | [Belt counts instead of red edges](#4-belt-counts-instead-of-red-edges) | M1 | Medium | XS–S | Next |
 | 5 | [Better default zoom](#5-better-default-zoom) | M1 | Low–Med | XS | Done (PR #5) |
