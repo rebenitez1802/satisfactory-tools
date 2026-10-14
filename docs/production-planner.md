@@ -155,15 +155,30 @@ byproducts (a recipe's second output, or all of a generator's outputs).
 - **Otherwise byproducts are pulled** like main products. A maker with
   nothing else to run for (its main output unconnected, or no goal around
   it) is sized by demand for its byproduct.
+- **Byproducts piped back into their own chain are spare too.** Aluminum
+  Scrap's water piped to the Alumina Solution that feeds it, Ficsonium Fuel
+  Rod's Dark Matter Residue going back to the Ficsonium that makes it, and
+  Fertile Uranium's water piped to its acids all work the same way:
+  - The belt carries what the maker gives back, and the input uses it
+    first. Other producers on that input make up the rest: Scrap 🎯360 takes
+    120 water from the loop and 240 from a Water Extractor.
+  - The maker doesn't grow to give back more, so the loop can't run away.
+  - When nothing else feeds the input, the rest is **missing**, as if the
+    input had no belt. The card shows the shortfall in red on the port, the
+    summary lists it under *Missing inputs*, and a warning names it: one
+    Ficsonium plant's loop is 20 m³/min of Dark Matter Residue short. ⚡ Build
+    chain adds a producer next to the loop's belt.
+  - Several inputs fed by one byproduct take it in plan order. Fertile
+    Uranium's 40 m³/min of water covers its sulfuric (25) and nitric (15)
+    acid exactly, with nothing else needed.
 - Technically the solver cuts the plan at those byproduct belts into
   *stages*, solves them makers first, and hands each stage the spare as a
   limited supply. A node's stage is the number of cut belts on its longest
   way in. Each stage also takes in the nodes upstream of it from earlier
   stages, adding its demand to theirs, with only the room their limits have
-  left. Byproduct belts that loop back into their maker's own chain stay
-  pulled (e.g. Ficsonium Fuel Rod's Dark Matter Residue feeding the
-  Ficsonium that makes it, or Fertile Uranium's water piped to the acids
-  that feed it).
+  left. A byproduct belt that loops back into its maker's own chain can't be
+  cut, so it stays in its maker's stage as a *spare belt*: it doesn't pull
+  on the maker, and carries what the maker makes at the rate it settles at.
 
 ## Presentation
 
@@ -171,7 +186,8 @@ byproducts (a recipe's second output, or all of a generator's outputs).
   *whole* (3 machines underclocked to 80%). Power is always costed as built.
   Limited nodes keep your count and run at the clock they need.
 - **Ports** show needed vs supplied. Unconnected inputs are listed as missing
-  inputs: things to import. Outputs show surplus.
+  inputs: things to import, and so is what a byproduct loop can't give back
+  (see Byproducts). Outputs show surplus.
   - A port with no belt yet shows its rate under the item: red for what an
     input needs, amber for what an output makes. Once a belt is connected,
     the rate moves to the belt label. An open end's output counts as having
@@ -283,7 +299,9 @@ byproducts (a recipe's second output, or all of a generator's outputs).
     skipped, and the walk stops after 25 steps with a supply node, so recipe
     loops can't run forever.
   - Inputs that already have a belt are left alone: building twice adds
-    nothing.
+    nothing. The exception is an input a byproduct loop feeds too little:
+    building it adds a producer next to the loop's belt
+    (`missingInputs` in `autobuild.ts` lists both kinds).
   - The new nodes are laid out with Tidy's rules, anchored to the node they
     were built for, and the view fits them.
 - **Build checklist** keeps track of a plan while you build it in the game.
@@ -353,6 +371,7 @@ Known v1 limits that the roadmap addresses:
 
 - Several Max goals behind one limit split it evenly; there is no per-branch
   share yet (roadmap #7).
-- Byproducts fed back into their own loop (aluminum scrap's water piped to
-  Alumina Solution, Ficsonium's Dark Matter Residue) are still pulled, and
-  the rates run away or drop to 0 (#16).
+- Loops of main products (Recycled Plastic ⇄ Recycled Rubber) are still
+  pulled; they settle as long as each round of the loop needs less than it
+  makes. A loop that needs more than it makes reports that it never
+  settles.

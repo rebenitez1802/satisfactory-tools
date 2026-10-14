@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { buildUpstream, chooseProducer, openInputs } from '../autobuild'
+import { buildUpstream, chooseProducer, missingInputs, openInputs } from '../autobuild'
 import { solvePlan } from '../solve'
 import type { Plan, PlanNode, RecipeNode } from '../types'
-import { catalog, extractorNode, goalNode, plan, recipeNode } from './fixtures'
+import { catalog, extractorNode, goalNode, plan, recipeNode, supplyNode } from './fixtures'
 
 const b = (id: string) => `base:${id}`
 
@@ -204,5 +204,35 @@ describe('buildUpstream', () => {
     // The existing plate node is reused, and its ingot input gets built too.
     expect(p.edges.some((e) => e.source === 'plate' && e.target === 'rip')).toBe(true)
     expect(openInputs(p, catalog)).toEqual([{ node: 'rip', item: b('Desc_IronScrew_C') }])
+  })
+
+  it('tops up an input that a byproduct loop feeds too little', () => {
+    // Aluminum Scrap gives back 120 of the 360 water its Alumina Solution needs.
+    const start = plan(
+      [
+        supplyNode('baux', 'Desc_OreBauxite_C', 0, false),
+        supplyNode('coal', 'Desc_Coal_C', 0, false),
+        recipeNode('alu', 'Recipe_AluminaSolution_C', 'Build_OilRefinery_C'),
+        recipeNode('scr', 'Recipe_AluminumScrap_C', 'Build_OilRefinery_C'),
+        goalNode('goal', 'Desc_AluminumScrap_C', 360),
+      ],
+      [
+        ['baux', 'alu', 'Desc_OreBauxite_C'],
+        ['coal', 'scr', 'Desc_Coal_C'],
+        ['alu', 'scr', 'Desc_AluminaSolution_C'],
+        ['scr', 'alu', 'Desc_Water_C'],
+        ['scr', 'goal', 'Desc_AluminumScrap_C'],
+      ],
+    )
+    const ports = missingInputs(start, catalog, solvePlan(start, catalog))
+    expect(ports).toEqual([{ node: 'alu', item: b('Desc_Water_C'), topUp: true }])
+    expect(missingInputs(start, catalog, solvePlan(start, catalog), { item: b('Desc_Coal_C') })).toEqual([])
+    const { plan: p, added } = buildUpstream(start, catalog, ports, { newId: ids() })
+    expect(extracted(p)).toEqual(['Water ← Water Extractor'])
+    expect(p.edges.some((e) => e.source === added[0] && e.target === 'alu')).toBe(true)
+    const r = expectComplete(p)
+    expect(r.nodes.get(added[0])!.activity).toBeCloseTo(240)
+    // Once topped up, nothing is missing, so building again adds nothing.
+    expect(missingInputs(p, catalog, r)).toEqual([])
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { solvePlan } from '../solve'
+import { shortfall, solvePlan } from '../solve'
 import type { Plan, PlanNode } from '../types'
 import { catalog, extractorNode, goalNode, machine, plan, recipeNode, supplyNode } from './fixtures'
 
@@ -769,5 +769,124 @@ describe('byproducts shared between stages', () => {
     expect(r.nodes.get('ore')!.activity).toBeCloseTo(70)
     expect(r.nodes.get('ore')!.bottleneck).toBe(true)
     expect(r.edges.get('e3')!.perMin).toBeCloseTo(20)
+  })
+})
+
+describe('byproduct loops', () => {
+  const WATER = 'Desc_Water_C'
+  const ALUMINA = 'Desc_AluminaSolution_C'
+  const SCRAP = 'Desc_AluminumScrap_C'
+  const BAUXITE = 'Desc_OreBauxite_C'
+  // Alumina Solution: 120 bauxite + 180 water → 120 alumina + 50 silica a minute.
+  // Aluminum Scrap: 240 alumina + 120 coal → 360 scrap + 120 water, piped back to the alumina.
+  const aluminum = (goal: number | 'max', o: { bauxite?: number; pump?: boolean } = {}) =>
+    solvePlan(
+      plan(
+        [
+          supplyNode('baux', BAUXITE, o.bauxite ?? 0, o.bauxite !== undefined),
+          supplyNode('coal', 'Desc_Coal_C', 0, false),
+          recipeNode('alu', 'Recipe_AluminaSolution_C', REFINERY),
+          recipeNode('scr', 'Recipe_AluminumScrap_C', REFINERY),
+          goalNode('g', SCRAP, goal),
+          ...(o.pump ? [extractorNode('w', 'Build_WaterPump_C', WATER, [{ purity: 'base:normal', count: 1 }])] : []),
+        ],
+        [
+          ['baux', 'alu', BAUXITE],
+          ['coal', 'scr', 'Desc_Coal_C'],
+          ['alu', 'scr', ALUMINA],
+          ['scr', 'alu', WATER],
+          ['scr', 'g', SCRAP],
+          ...(o.pump ? [['w', 'alu', WATER] as [string, string, string]] : []),
+        ],
+      ),
+      catalog,
+    )
+
+  it('a byproduct piped back is used first, and an extractor tops it up', () => {
+    const r = aluminum(360, { pump: true })
+    expect(r.nodes.get('scr')!.activity).toBeCloseTo(1)
+    expect(r.nodes.get('alu')!.activity).toBeCloseTo(2)
+    expect(r.edges.get('e3')!.perMin).toBeCloseTo(120)
+    expect(r.edges.get('e5')!.perMin).toBeCloseTo(240)
+    expect(r.nodes.get('w')!.activity).toBeCloseTo(240)
+    expect(r.nodes.get('alu')!.inputs.find((p) => p.item === `base:${WATER}`)).toMatchObject({ needed: expect.closeTo(360), supplied: expect.closeTo(360) })
+    expect(r.totals.missingInputs).toEqual([])
+    expect(r.diagnostics).toEqual([])
+  })
+
+  it('a loop that gives back too little reports the rest as missing', () => {
+    const r = aluminum(360)
+    expect(r.goals[0].achieved).toBe(360)
+    expect(r.nodes.get('alu')!.activity).toBeCloseTo(2)
+    const water = r.nodes.get('alu')!.inputs.find((p) => p.item === `base:${WATER}`)!
+    expect(water).toMatchObject({ needed: expect.closeTo(360), supplied: expect.closeTo(120), connected: true })
+    expect(shortfall(water)).toBeCloseTo(240)
+    expect(r.totals.missingInputs).toEqual([{ item: `base:${WATER}`, perMin: expect.closeTo(240) }])
+    expect(r.diagnostics).toEqual([
+      expect.objectContaining({ severity: 'warning', nodeId: 'alu', message: expect.stringContaining('Water is 240 m³/min short') }),
+    ])
+  })
+
+  it('a Max goal behind a limit gets what the loop allows', () => {
+    // 240 bauxite → 2 alumina refineries → 1 scrap refinery.
+    const r = aluminum('max', { bauxite: 240, pump: true })
+    expect(r.goals[0].achieved).toBeCloseTo(360)
+    expect(r.nodes.get('baux')!.bottleneck).toBe(true)
+    expect(r.nodes.get('w')!.activity).toBeCloseTo(240)
+    expect(r.diagnostics).toEqual([])
+  })
+
+  it('a loop that covers itself needs nothing else', () => {
+    // Fertile Uranium: 100 Non-Fissile Uranium and 40 water a minute, from 25 sulfuric and 15 nitric acid.
+    // The acids need 25 + 15 water: exactly what comes back.
+    const r = solvePlan(
+      plan(
+        [
+          recipeNode('fu', 'Recipe_Alternate_FertileUranium_C', 'Build_Blender_C'),
+          recipeNode('sa', 'Recipe_SulfuricAcid_C', REFINERY),
+          recipeNode('na', 'Recipe_NitricAcid_C', 'Build_Blender_C'),
+          goalNode('g', 'Desc_NonFissibleUranium_C', 100),
+        ],
+        [
+          ['fu', 'g', 'Desc_NonFissibleUranium_C'],
+          ['fu', 'sa', WATER],
+          ['fu', 'na', WATER],
+          ['sa', 'fu', 'Desc_SulfuricAcid_C'],
+          ['na', 'fu', 'Desc_NitricAcid_C'],
+        ],
+      ),
+      catalog,
+    )
+    expect(r.nodes.get('sa')!.activity).toBeCloseTo(0.5)
+    expect(r.nodes.get('na')!.activity).toBeCloseTo(0.5)
+    expect(r.splits[0].edges.map((e) => e.perMin)).toEqual([expect.closeTo(25), expect.closeTo(15)])
+    expect(r.totals.missingInputs.map((m) => m.item)).not.toContain(`base:${WATER}`)
+    expect(r.totals.surplus).toEqual([])
+    expect(r.diagnostics).toEqual([])
+  })
+
+  it('names what a Ficsonium loop is missing', () => {
+    // One plant burns 1 Ficsonium Fuel Rod a minute. Its 2 Ficsonium take 40 Dark Matter Residue;
+    // making the rod gives 20 back.
+    const DM = 'Desc_DarkEnergy_C'
+    const r = solvePlan(
+      plan(
+        [
+          recipeNode('fx', 'Recipe_Ficsonium_C', 'Build_HadronCollider_C'),
+          recipeNode('frod', 'Recipe_FicsoniumFuelRod_C', 'Build_QuantumEncoder_C'),
+          reactor('f', 'FicsoniumFuelRod', { power: 2500 }),
+        ],
+        [
+          ['fx', 'frod', 'Desc_Ficsonium_C'],
+          ['frod', 'fx', DM],
+          ['frod', 'f', 'Desc_FicsoniumFuelRod_C'],
+        ],
+      ),
+      catalog,
+    )
+    expect(r.goals[0].achieved).toBeCloseTo(2500)
+    expect(r.nodes.get('fx')!.outputs[0].produced).toBeCloseTo(2)
+    expect(r.totals.missingInputs).toContainEqual({ item: `base:${DM}`, perMin: expect.closeTo(20) })
+    expect(r.diagnostics.map((d) => d.message)).toEqual([expect.stringContaining('Dark Matter Residue is 20 m³/min short')])
   })
 })

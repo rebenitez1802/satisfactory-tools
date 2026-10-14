@@ -255,9 +255,13 @@ PlannerContext { catalog, result, updateNode, markDone, openSplit, isRecipeHidde
     `extractorNode`, `goalNode`, `supplyNode`, `plan()`, and `catalog`, which
     is built from the committed `public/packs/base/pack.json`.
   - Order of the solve: `splitStages` (byproduct belts cut the plan into
-    stages) → per stage, producers first: spare byproducts become limited
+    stages; those looping back into their maker's chain become spare belts
+    instead) → per stage, producers first: spare byproducts become limited
     supplies → `withOpenEnds` → targets pass → scale by the tightest limit →
     Max goals fair-share → final pass; then one `assemble` over the whole plan.
+  - A connected input can get less than it needs only when spare loop belts
+    are all that feed it. `shortfall(port)` is that gap, and it counts as a
+    missing input.
   - "Goal-like" means `Unit.anchor` is set: goal nodes, and generator recipe
     nodes with `power`. Use that, not `kind === 'goal'`, in solver code.
 - **Generators are recipe nodes** whose machine has `generation`. Their

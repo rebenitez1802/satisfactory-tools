@@ -7,7 +7,7 @@ import {
   defaultPurity,
   doneShortfall,
   maxClock,
-  openInputs,
+  missingInputs,
   minClock,
   nodeRate,
   outputMultiplier,
@@ -65,7 +65,7 @@ export function Inspector({ plan, result, catalog, selection, actions, isRecipeH
         <NodeInspector
           key={node.id}
           node={node}
-          open={openInputs(plan, catalog, { node: node.id }).length}
+          open={missingInputs(plan, catalog, result, { node: node.id }).length}
           result={result}
           catalog={catalog}
           actions={actions}
