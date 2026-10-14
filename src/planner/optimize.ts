@@ -11,6 +11,10 @@
 // - A raw resource the plan already has an extractor or supply for comes
 //   only from those, as ⚡ Build chain reuses them. Otherwise new extractors
 //   may take up to what the map's sites give (world.ts).
+// - Resources the plan avoids (`PlanSettings.avoid`) get no new extractor
+//   and no import, so they come only from the plan's own sources. A goal
+//   that can't be made without one is reported ("Plastic needs Crude Oil")
+//   instead of quietly getting nothing.
 //
 // The program, in machines (or items/min) per group:
 // - Every item: made ≥ used. Byproducts may be left over.
@@ -40,7 +44,7 @@
 //   item, if there is one, to make up whatever the spare doesn't cover.
 
 import type { Catalog, ItemId, Machine, RecipeId, WorldSite } from '../catalog'
-import { bestExtractor, buildUpstream, isGenerator, missingInputs, openInputs, type PortRef } from './autobuild'
+import { avoidedResources, bestExtractor, buildUpstream, isGenerator, missingInputs, openInputs, type PortRef } from './autobuild'
 import { connectPorts } from './edit'
 import { createNode, type PickOption } from './create'
 import { solveLp, type LpConstraint, type LpProblem } from './lp'
@@ -208,6 +212,7 @@ function replaceable(node: PlanNode, catalog: Catalog): boolean {
 export function optimize(plan: Plan, catalog: Catalog, opts: OptimizeOptions): OptimizeResult {
   const objective = opts.objective ?? 'resources'
   const sites = opts.world ?? worldSites(plan, catalog)
+  const avoid = avoidedResources(plan, catalog)
   const weight = resourceWeights(catalog, sites)
   const fail = (message: string): OptimizeResult => ({ ok: false, message, scale: 0, plan, added: [], removed: [] })
 
@@ -274,7 +279,7 @@ export function optimize(plan: Plan, catalog: Catalog, opts: OptimizeOptions): O
   // Generator waste is made too, by the kept generators: never brought in.
   const made = new Set([...recipes, ...[...catalog.recipes.values()].filter((r) => isGenerator(catalog, r))].flatMap((r) => r.outputs.map((a) => a.item)))
   for (const item of relevant) {
-    if (keptSource.has(item)) continue
+    if (keptSource.has(item) || avoid.has(item)) continue
     const it = catalog.items.get(item)!
     const machine = bestExtractor(catalog, item)
     if (machine) {
@@ -296,6 +301,11 @@ export function optimize(plan: Plan, catalog: Catalog, opts: OptimizeOptions): O
     const n = c.node!
     if (n.kind === 'goal') return catalog.items.get(n.item)?.name ?? n.item
     return n.kind === 'recipe' ? (catalog.recipes.get(n.recipe)?.name ?? n.recipe) : n.id
+  }
+
+  if (avoid.size) {
+    const blocked = blockedByAvoid(columns, avoid, name, catalog)
+    if (blocked.length) return fail(`${blocked.join('. ')}. Take it off "Don't use", or give the plan its own extractor or supply of it.`)
   }
 
   // The programs. Column j is variable j; `extra` adds one more (the scale or share).
@@ -440,6 +450,44 @@ export function optimize(plan: Plan, catalog: Catalog, opts: OptimizeOptions): O
     added: built.added,
     removed,
   }
+}
+
+/**
+ * Anchors the columns can't feed without the avoided resources, as "Plastic
+ * needs Crude Oil": what one more resource would unblock, or else all of
+ * them. Anchors that more resources wouldn't help are left to the program.
+ */
+function blockedByAvoid(columns: Column[], avoid: Set<ItemId>, name: (c: Column) => string, catalog: Catalog): string[] {
+  // Items the columns can get to, starting from their sources and `seed`.
+  const reach = (seed: Iterable<ItemId>) => {
+    const got = new Set(seed)
+    for (let changed = true; changed; ) {
+      changed = false
+      for (const c of columns) {
+        if (![...c.inputs.keys()].every((i) => got.has(i))) continue
+        for (const i of c.outputs.keys()) {
+          if (got.has(i)) continue
+          got.add(i)
+          changed = true
+        }
+      }
+    }
+    return got
+  }
+  const fed = (c: Column, got: Set<ItemId>) => [...c.inputs.keys()].every((i) => got.has(i))
+  const now = reach([])
+  const each = [...avoid].map((r) => ({ r, got: reach([r]) }))
+  const all = reach(avoid)
+  const names = (rs: ItemId[], or: string) => {
+    const n = rs.map((r) => catalog.items.get(r)?.name ?? r)
+    return n.length > 1 ? `${n.slice(0, -1).join(', ')} ${or} ${n[n.length - 1]}` : n[0]
+  }
+  return columns.flatMap((c) => {
+    if (c.anchor === undefined || fed(c, now) || !fed(c, all)) return []
+    if (c.node?.kind === 'goal' && avoid.has(c.node.item)) return [`${name(c)} is on "Don't use"`]
+    const one = each.filter(({ got }) => fed(c, got)).map(({ r }) => r)
+    return [`${name(c)} needs ${one.length ? names(one, 'or') : names([...avoid], 'and')}`]
+  })
 }
 
 /**

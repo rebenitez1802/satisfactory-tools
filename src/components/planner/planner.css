@@ -1348,3 +1348,45 @@
   width: auto;
   margin-top: 0;
 }
+
+/* "Don't use" resource toggles (Optimize dialog, summary settings) */
+.pn-avoid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pn-avoid-chip {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-2);
+  cursor: pointer;
+}
+.pn-avoid-chip:hover {
+  border-color: var(--text-dim);
+}
+.pn-avoid-chip.off {
+  border-color: var(--red);
+  background: color-mix(in srgb, var(--red) 14%, var(--bg-2));
+}
+.pn-avoid-chip.off .icon {
+  opacity: 0.45;
+  filter: grayscale(1);
+}
+.pn-avoid-chip.off::after {
+  content: '';
+  position: absolute;
+  inset: 50% 2px auto;
+  height: 2px;
+  background: var(--red);
+  transform: rotate(-45deg);
+}
+.pn-opt-avoid {
+  margin-bottom: 12px;
+}
+.pn-opt-avoid .pn-opt-hint {
+  margin: 4px 0 0;
+}

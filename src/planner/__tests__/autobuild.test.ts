@@ -77,7 +77,7 @@ describe('chooseProducer', () => {
   })
 
   it('skips recipes that eat an item already being built', () => {
-    expect(pick('Desc_IronIngot_C', { avoid: new Set([b('Desc_OreIron_C')]) })).not.toBe('Iron Ingot')
+    expect(pick('Desc_IronIngot_C', { path: new Set([b('Desc_OreIron_C')]) })).not.toBe('Iron Ingot')
   })
 })
 
@@ -234,5 +234,46 @@ describe('buildUpstream', () => {
     expect(r.nodes.get(added[0])!.activity).toBeCloseTo(240)
     // Once topped up, nothing is missing, so building again adds nothing.
     expect(missingInputs(p, catalog, r)).toEqual([])
+  })
+})
+
+describe('resources to avoid', () => {
+  const avoid = (...items: string[]) => ({ settings: { machineMode: 'fractional' as const, avoid: items.map(b) } })
+
+  it('picks recipes that do without them, before the standard order', () => {
+    const pick = (item: string, avoid: string[], isRecipeHidden?: (id: string) => boolean) => {
+      const o = chooseProducer(catalog, b(item), { avoid: new Set(avoid.map(b)), isRecipeHidden })
+      return o?.kind === 'recipe' ? o.recipe.name : o?.kind
+    }
+    expect(pick('Desc_LiquidOil_C', ['Desc_LiquidOil_C'])).toBe('supply')
+    // Circuit Board needs plastic, so oil; Silicon Circuit Board doesn't.
+    expect(pick('Desc_CircuitBoard_C', [])).toBe('Circuit Board')
+    expect(pick('Desc_CircuitBoard_C', ['Desc_LiquidOil_C'])).toBe('Silicon Circuit Board')
+    // With no way around it, the usual order holds; the oil then comes from a supply.
+    expect(pick('Desc_CircuitBoard_C', ['Desc_LiquidOil_C'], (id) => catalog.recipes.get(id)!.alternate)).toBe('Circuit Board')
+    expect(pick('Desc_Rubber_C', ['Desc_LiquidOil_C'])).toBe('Rubber')
+  })
+
+  it('builds without them, ending at a supply node where nothing else works', () => {
+    const { plan: p } = buildUpstream(
+      plan([goalNode('goal', 'Desc_Plastic_C', 20)], [], avoid('Desc_LiquidOil_C')),
+      catalog,
+      [{ node: 'goal', item: b('Desc_Plastic_C') }],
+      { newId: ids() },
+    )
+    expect(extracted(p).some((x) => x.startsWith('Crude Oil'))).toBe(false)
+    expect(p.nodes.some((n) => n.kind === 'supply' && n.item === b('Desc_LiquidOil_C'))).toBe(true)
+  })
+
+  it('still reuses the plan\'s own extractor of it', () => {
+    const oil = extractorNode('oil', 'Build_OilPump_C', 'Desc_LiquidOil_C', [{ purity: 'base:normal', count: 1 }])
+    const { plan: p } = buildUpstream(
+      plan([goalNode('goal', 'Desc_Plastic_C', 20), oil], [], avoid('Desc_LiquidOil_C')),
+      catalog,
+      [{ node: 'goal', item: b('Desc_Plastic_C') }],
+      { newId: ids() },
+    )
+    expect(p.nodes.some((n) => n.kind === 'supply')).toBe(false)
+    expect(p.edges.some((e) => e.source === 'oil')).toBe(true)
   })
 })

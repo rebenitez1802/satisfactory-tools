@@ -227,3 +227,40 @@ describe('optimize', () => {
     expect(custom.scale).toBeCloseTo(1)
   })
 })
+
+describe('resources to avoid', () => {
+  const avoiding = (nodes: Parameters<typeof plan>[0], ...items: string[]) =>
+    plan(nodes, [], { settings: { machineMode: 'fractional', avoid: items.map((i) => `base:${i}`) } })
+
+  it('makes frames without oil when told to', () => {
+    // With every alternate, the cheapest frames take a plastic and rubber
+    // chain (Coated Iron Plate, Recycled Plastic…); without oil, they don't.
+    const free = run(plan([goalNode('g', 'Desc_ModularFrame_C', 5)]))
+    expect(free.raw('Desc_LiquidOil_C')).toBeGreaterThan(0)
+    const r = run(avoiding([goalNode('g', 'Desc_ModularFrame_C', 5)], 'Desc_LiquidOil_C'))
+    expect(r.ok).toBe(true)
+    expect(r.raw('Desc_LiquidOil_C')).toBe(0)
+    expect(r.plan.nodes.some((n) => (n.kind === 'extractor' ? n.resource : n.kind === 'supply' ? n.item : '') === 'base:Desc_LiquidOil_C')).toBe(false)
+    expect(achieved(r.solved, 'g')).toBeCloseTo(5)
+    expect(r.solved.totals.missingInputs).toEqual([])
+  })
+
+  it('still uses the plan\'s own extractors of it', () => {
+    const oil = extractorNode('oil', 'Build_OilPump_C', 'Desc_LiquidOil_C', [{ purity: 'base:normal', count: 1 }], { limited: true })
+    const r = run(avoiding([oil, goalNode('g', 'Desc_Plastic_C', 20)], 'Desc_LiquidOil_C'), { isRecipeHidden: unlocked() })
+    expect(r.ok).toBe(true)
+    expect(achieved(r.solved, 'g')).toBeCloseTo(20)
+    expect(r.raw('Desc_LiquidOil_C')).toBeCloseTo(30)
+  })
+
+  it('says which goal needs which resource', () => {
+    const r = run(avoiding([goalNode('g', 'Desc_Plastic_C', 20), goalNode('i', 'Desc_IronPlate_C', 20)], 'Desc_LiquidOil_C', 'Desc_Coal_C'), {
+      isRecipeHidden: unlocked(),
+    })
+    expect(r.ok).toBe(false)
+    expect(r.message).toMatch(/^Plastic needs Crude Oil\. /)
+    expect(r.message).not.toMatch(/Iron Plate/)
+    const ore = run(avoiding([goalNode('g', 'Desc_OreIron_C', 20)], 'Desc_OreIron_C'))
+    expect(ore.message).toMatch(/^Iron Ore is on "Don't use"\./)
+  })
+})

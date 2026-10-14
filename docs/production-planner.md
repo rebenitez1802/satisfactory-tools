@@ -293,6 +293,12 @@ byproducts (a recipe's second output, or all of a generator's outputs).
     "Simplest" counts recipe steps down to raw resources, so Fuel comes from
     crude oil, not from unpackaging or residue. Locked alternates are never
     used.
+  - **Don't use** (below): an avoided resource is never mined anew; it ends
+    at a supply node, so it shows as brought in. Recipes whose whole chain
+    can do without the avoided resources go first, in the order above
+    (Circuit Board without oil: Silicon Circuit Board); when none can, the
+    usual order holds. The plan's own extractors and supplies of an avoided
+    resource still count, and are reused as usual.
   - A recipe is remembered for its main product when the player switches to
     it in the inspector, or picks it from an input's picker.
   - It **reuses before adding** (a preference, on by default): an input
@@ -409,6 +415,14 @@ byproducts (a recipe's second output, or all of a generator's outputs).
     a little more than the program planned (see Follow-ups).
   - Fractional machines are fine; the plan's machine mode shows them as
     usual.
+  - **Don't use** (a row of resource chips in the dialog, under the
+    objective; picking one re-solves at once): avoided resources get no new
+    extractor and no supply, so they come only from the plan's own
+    extractors and supplies. A goal that can't be made without one is
+    reported and nothing is proposed: "Plastic needs Crude Oil. Take it off
+    "Don't use", or give the plan its own extractor or supply of it." With
+    every alternate, 5 Modular Frames/min normally take a plastic and rubber
+    chain; without oil, Steel Cast Plate and Stitched Iron Plate.
 - **World nodes:** the summary lists the resource nodes and well
   satellites the plan's extractors use against what the map has (hover for
   each purity), in red with a note when there are more than exist. A
@@ -417,6 +431,11 @@ byproducts (a recipe's second output, or all of a generator's outputs).
   counts are the default map's (from the wiki), or the plan's own, edited
   under Settings → World nodes (1.2's World Randomization moves nodes);
   *Reset* goes back to the map's. ✨ Optimize never plans past them.
+- **Don't use** (Settings, and the ✨ Optimize dialog): raw resources this
+  plan shouldn't mine anew ("build this without oil"), saved with the plan
+  (`PlanSettings.avoid`). ✨ Optimize and ⚡ Build chain both follow it (see
+  above); the solver doesn't, so a plan built by hand can still use them.
+  It's per plan, not a preference, since it's about this factory.
 - **Preferences** apply to every plan: unlocked alternates, belt line style
   (angled, straight or curved), whether ⚡ Build chain reuses nodes, the
   recipe last picked per item, whether the recipe picker compares at the
