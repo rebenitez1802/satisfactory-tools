@@ -340,6 +340,7 @@ select:focus {
   border: 1px solid rgba(239, 68, 68, 0.35);
   color: #fca5a5;
 }
+.warning.error,
 .warning.belt-over-capacity {
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.4);
@@ -394,6 +395,23 @@ select:focus {
   display: block;
   margin-bottom: 8px;
   font-size: 15px;
+}
+
+/* ---- Planner ---- */
+.icon {
+  display: inline-block;
+  flex: none;
+  object-fit: contain;
+  vertical-align: middle;
+}
+.icon-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 /* ---- React Flow canvas ---- */
@@ -599,4 +617,13 @@ select:focus {
   color: var(--text-dim);
   font-size: 11.5px;
   text-align: center;
+}
+.app-footer span {
+  display: block;
+}
+.app-footer span + span {
+  margin-top: 4px;
+}
+.app-footer a {
+  color: inherit;
 }

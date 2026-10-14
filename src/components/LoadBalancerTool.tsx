@@ -24,18 +24,41 @@ function parse(n: string): number {
   return Number.isFinite(v) ? v : NaN
 }
 
+/**
+ * Rates handed over in the URL, e.g. from the production planner:
+ * `#/balancer?in=120&out=90|Iron Plate&out=30|Iron Rod`.
+ */
+function readPrefill(): { input: string; outputs: OutputRow[] } | null {
+  const query = window.location.hash.split('?')[1]
+  if (!query) return null
+  const params = new URLSearchParams(query)
+  const input = params.get('in')
+  const outs = params.getAll('out')
+  if (!input || outs.length === 0) return null
+  return {
+    input,
+    outputs: outs.map((o, i) => {
+      const [rate, ...label] = o.split('|')
+      return { id: i, rate, label: label.join('|') }
+    }),
+  }
+}
+
 export function LoadBalancerTool() {
-  const nextId = useRef(3)
-  const [input, setInput] = useState('')
+  const [prefill] = useState(readPrefill)
+  const nextId = useRef(prefill ? prefill.outputs.length : 3)
+  const [input, setInput] = useState(prefill?.input ?? '')
   const [beltMax, setBeltMax] = useState(0)
   const [direction, setDirection] = useState<Direction>('BT')
   const [showLabels, setShowLabels] = useState(true)
   const [showBadges, setShowBadges] = useState(true)
-  const [outputs, setOutputs] = useState<OutputRow[]>([
-    { id: 0, label: '', rate: '' },
-    { id: 1, label: '', rate: '' },
-    { id: 2, label: '', rate: '' },
-  ])
+  const [outputs, setOutputs] = useState<OutputRow[]>(
+    prefill?.outputs ?? [
+      { id: 0, label: '', rate: '' },
+      { id: 1, label: '', rate: '' },
+      { id: 2, label: '', rate: '' },
+    ],
+  )
 
   const addRow = () =>
     setOutputs((rows) => [...rows, { id: nextId.current++, label: '', rate: '' }])

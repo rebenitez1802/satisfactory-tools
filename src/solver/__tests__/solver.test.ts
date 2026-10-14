@@ -180,3 +180,24 @@ describe('solve: arbitrary ratios', () => {
     expect(tree.loopbacks).toBe(0)
   })
 })
+
+describe('simple ratios', () => {
+  it('recovers exact ratios from repeating decimals', async () => {
+    const { simpleRatios } = await import('../ratios')
+    expect(simpleRatios([80 / 3, 40 / 3])).toMatchObject({ ratios: [2, 1], N: 3 })
+    expect(simpleRatios([33.33, 66.67])).toMatchObject({ ratios: [1, 2], N: 3 })
+    expect(simpleRatios([37, 63])).toMatchObject({ ratios: [37, 63], N: 100 })
+    expect(simpleRatios([12.345, 87.655])).toMatchObject({ ratios: [10, 71] })
+    expect(simpleRatios([12.345, 87.655], 120, 1e-7)).toBeUndefined()
+  })
+
+  it('solve snaps thirds to a small balancer', () => {
+    const r = solve({ input: 40, outputs: [{ rate: 80 / 3 }, { rate: 40 / 3 }] })
+    expect(r.ok).toBe(true)
+    expect(r.N).toBe(3)
+    const rounded = solve({ input: 40, outputs: [{ rate: 26.6667 }, { rate: 13.3333 }] })
+    expect(rounded.ok).toBe(true)
+    expect(rounded.N).toBe(3)
+    expect(rounded.warnings.some((w) => w.message.includes('2 : 1'))).toBe(true)
+  })
+})
