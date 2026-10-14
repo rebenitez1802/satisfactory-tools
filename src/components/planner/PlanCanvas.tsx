@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
 import {
   Background,
   ControlButton,
@@ -16,8 +16,9 @@ import {
   type OnConnectStartParams,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import type { ItemId } from '../../catalog'
+import type { Catalog, ItemId } from '../../catalog'
 import {
+  buildUpstream,
   connectPorts,
   consumersOf,
   copyNodes,
@@ -25,7 +26,9 @@ import {
   goalOptions,
   layoutPlan,
   newNodeId,
+  openInputs,
   pasteClip,
+  portsOf,
   placeBeside,
   producersOf,
   removeEdges,
@@ -33,7 +36,7 @@ import {
   resourceOptions,
   retargetEdges,
 } from '../../planner'
-import type { AddContext, Clip, PickOption, Plan, PlanEdge, SolveResult } from '../../planner'
+import type { AddContext, Clip, PickOption, Plan, PlanEdge, PlanNode, PortRef, SolveResult } from '../../planner'
 import { edgeTypes, type PlanFlowEdge } from './FlowEdge'
 import { nodeLabel } from './labels'
 import { handleItem, inHandle, nodeTypes, outHandle, type PlanFlowNode } from './nodes'
@@ -42,6 +45,22 @@ import { usePlanner } from './plannerContext'
 
 /** Typical card width, used to place new nodes before they've been measured. */
 const CARD_W = 170
+
+/**
+ * A card's size before React Flow has measured it: ports stack down the
+ * sides, so it grows with its longest side.
+ */
+function estimateSize(node: PlanNode, catalog: Catalog) {
+  const ports = portsOf(node, catalog)
+  const most = Math.max(ports?.inputs.size ?? 1, ports?.outputs.size ?? 1)
+  return { w: 140, h: Math.max(96, 16 + 38 * most) }
+}
+
+/** What the rest of the planner can ask the canvas to do. */
+export interface CanvasApi {
+  /** ⚡ Build chain: fill these inputs back to raw resources, lay out what's new, and show it. */
+  buildChain: (ports: PortRef[]) => void
+}
 
 /** The plan node under a screen point, if any. */
 function nodeAt(x: number, y: number): string | undefined {
@@ -82,11 +101,13 @@ export function PlanCanvas({
   setPlan,
   result,
   onSelectionChange,
+  apiRef,
 }: {
   plan: Plan
   setPlan: Dispatch<SetStateAction<Plan>>
   result: SolveResult
   onSelectionChange: (selection: { nodes: string[]; edges: string[] }) => void
+  apiRef?: MutableRefObject<CanvasApi | null>
 }) {
   const [rfNodes, setRfNodes] = useState<PlanFlowNode[]>(() =>
     plan.nodes.map((node) => ({ id: node.id, type: node.kind, position: node.position, data: { node } })),
@@ -95,7 +116,7 @@ export function PlanCanvas({
   const [picker, setPicker] = useState<PickerState | null>(null)
   const wrapper = useRef<HTMLDivElement>(null)
   const { screenToFlowPosition, flowToScreenPosition, getViewport, setCenter, fitView } = useReactFlow()
-  const { catalog, isRecipeHidden } = usePlanner()
+  const { catalog, isRecipeHidden, build, rememberRecipe } = usePlanner()
 
   // Nodes to select after the next rebuild (freshly pasted or duplicated ones).
   const pendingSelect = useRef<Set<string> | null>(null)
@@ -322,6 +343,10 @@ export function PlanCanvas({
             y: flow.y - 40,
           }
       const node = createNode(option, newNodeId(), position, context, catalog)
+      // Picking how to make an item is remembered for ⚡ Build chain.
+      if (context === 'producer' && anchor && option.kind === 'recipe' && option.recipe.outputs[0]?.item === anchor.item) {
+        rememberRecipe(anchor.item, option.recipe.id)
+      }
       const edge: PlanEdge | undefined = anchor
         ? context === 'producer'
           ? { id: `${node.id}->${anchor.node}:${anchor.item}`, source: node.id, target: anchor.node, item: anchor.item }
@@ -341,7 +366,7 @@ export function PlanCanvas({
         if (!visible) setCenter(node.position.x + CARD_W / 2, node.position.y + 55, { zoom: getViewport().zoom, duration: 300 })
       }, 60)
     },
-    [picker, catalog, setPlan, flowToScreenPosition, getViewport, setCenter],
+    [picker, catalog, setPlan, flowToScreenPosition, getViewport, setCenter, rememberRecipe],
   )
 
   // Ctrl/⌘+C / V copy and paste the selected nodes with the belts between
@@ -403,6 +428,31 @@ export function PlanCanvas({
     fitView({ ...FIT_VIEW, duration: 300, nodes: ids.length ? ids.map((id) => ({ id })) : undefined })
   }, [rfNodes, fitView])
 
+  // ⚡ Build chain: one setPlan (one undo step) with the new nodes already
+  // laid out beside the chain they feed, then show them with the nodes they
+  // were built for.
+  const buildChain = useCallback(
+    (ports: PortRef[]) => {
+      const before = planRef.current
+      const { plan: built, added } = buildUpstream(before, catalog, ports, {
+        newId: newNodeId,
+        isRecipeHidden,
+        preferred: build.preferred,
+        reuse: build.reuse,
+      })
+      if (built === before) return
+      const sizes = new Map(
+        rfNodesRef.current.map((n) => [n.id, { w: n.measured?.width ?? CARD_W, h: n.measured?.height ?? 100 }]),
+      )
+      for (const n of built.nodes) if (!sizes.has(n.id)) sizes.set(n.id, estimateSize(n, catalog))
+      const moved = layoutPlan(built, sizes, { only: added })
+      setPlan({ ...built, nodes: built.nodes.map((n) => (moved.has(n.id) ? { ...n, position: moved.get(n.id)! } : n)) })
+      pendingFit.current = [...new Set([...ports.map((p) => p.node), ...added])]
+    },
+    [catalog, isRecipeHidden, build, setPlan],
+  )
+  if (apiRef) apiRef.current = { buildChain }
+
   // Zoom to the selected nodes, or the whole plan if nothing is selected (F).
   const zoomToSelection = useCallback(() => {
     const selected = rfNodesRef.current.filter((n) => n.selected).map((n) => ({ id: n.id }))
@@ -431,6 +481,21 @@ export function PlanCanvas({
     const all = picker.context === 'producer' ? producersOf(catalog, picker.anchor.item) : consumersOf(catalog, picker.anchor.item)
     return all.filter((o) => o.kind !== 'recipe' || !isRecipeHidden(o.recipe.id))
   }, [picker, catalog, isRecipeHidden])
+
+  // Clicking (or dragging from) an input with no belt offers to build its whole chain.
+  const pickerAction = useMemo(() => {
+    const anchor = picker?.context === 'producer' ? picker.anchor : undefined
+    if (!anchor || !openInputs(plan, catalog, { node: anchor.node, item: anchor.item }).length) return undefined
+    const item = catalog.items.get(anchor.item)?.name ?? 'this item'
+    return {
+      title: '⚡ Build chain',
+      detail: `${item} and everything it needs, back to raw resources`,
+      onRun: () => {
+        setPicker(null)
+        buildChain([anchor])
+      },
+    }
+  }, [picker, plan, catalog, buildChain])
 
   const pickerTitle = (() => {
     if (!picker) return ''
@@ -520,6 +585,7 @@ export function PlanCanvas({
         <Picker
           title={pickerTitle}
           options={pickerOptions}
+          action={pickerAction}
           hide={isRecipeHidden}
           at={picker.at}
           onPick={onPick}

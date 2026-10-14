@@ -26,6 +26,10 @@ export interface Prefs {
   lockedAlternates: string[]
   /** How belts are drawn: right-angled (like the balancer), straight, or curved. */
   edgeStyle: EdgeStyle
+  /** Recipe the player last picked per item; ⚡ Build chain uses it first. */
+  preferredRecipes: Record<string, string>
+  /** ⚡ Build chain connects to nodes already making an item instead of adding new ones. */
+  buildReuse: boolean
 }
 
 function read<T>(key: string): T | null {
@@ -62,7 +66,7 @@ export function saveStore(store: PlanStore) {
 }
 
 export function loadPrefs(): Prefs {
-  return { lockedAlternates: [], edgeStyle: 'step', ...read<Prefs>(PREFS_KEY) }
+  return { lockedAlternates: [], edgeStyle: 'step', preferredRecipes: {}, buildReuse: true, ...read<Prefs>(PREFS_KEY) }
 }
 
 export function savePrefs(prefs: Prefs) {

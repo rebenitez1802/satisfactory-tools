@@ -13,8 +13,8 @@ can I make from 90 iron ore/min?") and mixes of both. The data layer is in
 
 1. **Manual planner (v1).** You place and connect nodes; the app sizes them
    from your targets and limits.
-2. **Auto-build.** Given a goal, the app fills in the chain using default
-   recipes (later).
+2. **Auto-build** (⚡ Build chain, below). Given a goal or a missing input,
+   the app fills in the chain back to raw resources.
 3. **Optimize.** Given inputs and goals, the app picks recipes and shares
    scarce resources with an LP solver (later). It uses the same targets and
    limits as v1, so the UI doesn't change.
@@ -218,8 +218,43 @@ byproducts (a recipe's second output, or all of a generator's outputs).
   if nothing is selected.
 - **Shortcuts:** ⌘/Ctrl + C, V, D (with the belts between copied nodes),
   ⌘/Ctrl + Z / Shift+Z, Delete, F (zoom to selection).
-- **Preferences** apply to every plan: unlocked alternates, and belt line
-  style (angled, straight or curved).
+- **⚡ Build chain** fills unconnected inputs with producers, all the way back
+  to raw resources, as one undo step. It is offered in three places: the
+  inspector of a node with missing inputs (a goal, or any machine group),
+  first in the picker that opens from an input with no belt, and next to
+  each row of the summary's *Missing inputs* (plus **Build all**). The rules
+  (`buildUpstream` in `src/planner/autobuild.ts`):
+  - What makes an item (`chooseProducer`), in order: an extractor for raw
+    resources (the fastest one with its own power, so a Miner Mk.3, a Water
+    Extractor, an Oil Extractor; Nitrogen gets a Resource Well Extractor);
+    the recipe the player last picked for that item; the simplest standard
+    recipe whose **main** product is the item; the simplest unlocked
+    alternate; otherwise a supply node (leaves, mycelia, alien remains, …).
+    "Simplest" counts recipe steps down to raw resources, so Fuel comes from
+    crude oil, not from unpackaging or residue. Locked alternates are never
+    used.
+  - A recipe is remembered for its main product when the player switches to
+    it in the inspector, or picks it from an input's picker.
+  - It **reuses before adding** (a preference, on by default): an input
+    connects to a node that already makes its item. Extractors and supplies
+    are reused even when ⛔ limited, since they are what the player has;
+    machine groups only when flexible. A reused node's own missing inputs
+    are built too. Nothing downstream of the input is reused, so reuse
+    never closes a loop.
+  - Everything added is flexible, so the plan's targets and limits still
+    drive the rates: machine groups size themselves, and extractors count
+    the nodes (or Water Extractors) they need, on normal purity.
+  - Byproducts are left unconnected and show up as spare output.
+  - A recipe that eats an item already being built further down the line is
+    skipped, and the walk stops after 25 steps with a supply node, so recipe
+    loops can't run forever.
+  - Inputs that already have a belt are left alone: building twice adds
+    nothing.
+  - The new nodes are laid out with Tidy's rules, anchored to the node they
+    were built for, and the view fits them.
+- **Preferences** apply to every plan: unlocked alternates, belt line style
+  (angled, straight or curved), whether ⚡ Build chain reuses nodes, and the
+  recipe last picked per item.
 
 ## Build steps
 

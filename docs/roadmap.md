@@ -16,7 +16,7 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | # | Item | Milestone | Value | Effort | Status |
 |---|---|---|---|---|---|
 | 1 | [Auto-layout](#1-auto-layout) | M1 | High | S | Done (PR #5) |
-| 2 | [Auto-build upstream](#2-auto-build-upstream-mode-2) | M1 | Very high | M | Next |
+| 2 | [Auto-build upstream](#2-auto-build-upstream-mode-2) | M1 | Very high | M | Done (PR #9) |
 | 3 | [Compare recipes at this node's rate](#3-compare-recipes-at-this-nodes-rate) | M1 | High | S | Next |
 | 4 | [Belt counts instead of red edges](#4-belt-counts-instead-of-red-edges) | M1 | Medium | XS–S | Next |
 | 5 | [Better default zoom](#5-better-default-zoom) | M1 | Low–Med | XS | Done (PR #5) |
@@ -103,6 +103,17 @@ readable. **Effort:** S.
   consumers in a DAG), and a Playwright screenshot of the sample after Tidy.
 
 ### 2. Auto-build upstream (mode 2)
+
+**Done.** Its behaviour is in
+[production-planner.md](production-planner.md#interaction) ("⚡ Build
+chain"). Differences from the plan below: raw resources are mined before
+the remembered recipe is tried (so a remembered converter recipe never
+replaces a miner); reuse also covers extractors and supplies, ⛔ limited ones
+included; the loop guard tracks items on the current path rather than
+`(item, recipe)` pairs; and the Modular Frame chain needs only Iron Ore
+(the standard recipes use no limestone). For #6 and #17: `chooseProducer`,
+`buildUpstream` and `openInputs` in `src/planner/autobuild.ts`, and
+`CanvasApi.buildChain` in `PlanCanvas.tsx` (build, lay out, fit).
 
 **Value:** the biggest speed-up. A goal, or any missing input, becomes a full
 chain down to raw resources. **Effort:** M.
