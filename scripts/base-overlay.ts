@@ -69,6 +69,8 @@ interface ExtractorExtra {
   belt: [number, number]
   pipe: [number, number]
   usesPurity: boolean
+  /** Placed on any water, not on resource nodes: no limit on how many. */
+  anywhere?: boolean
   poweredBy?: string
   /** For extractors greeny doesn't list under `miners`. */
   fallback?: { resources: string[]; ratePerMin: number }
@@ -83,6 +85,7 @@ export const EXTRACTORS: Record<string, ExtractorExtra> = {
     belt: [0, 0],
     pipe: [0, 1],
     usesPurity: false,
+    anywhere: true,
     fallback: { resources: ['Desc_Water_C'], ratePerMin: 120 },
   },
   Build_FrackingExtractor_C: { belt: [0, 0], pipe: [0, 1], usesPurity: true, poweredBy: 'Build_FrackingSmasher_C' },

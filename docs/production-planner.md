@@ -45,7 +45,13 @@ never overwrites them.
 
 - A flexible recipe node keeps your clock and Somersloops as preferences, and
   its machine count is derived.
-- A flexible extractor or supply shows what it needs to provide.
+- A flexible extractor or supply shows what it needs to provide. Extractors
+  on resource nodes run their configured nodes at whatever clock that takes,
+  and warn when it is past the maximum: more nodes are needed. Extractors
+  that can be built anywhere (Water Extractors) are sized like recipe
+  machines instead: 900 m³/min of water is 7.5 extractors at the preferred
+  clock (or 8 at 93.75% in whole-machine mode), never one at 750%. A ⛔
+  limited group of them keeps its extractor count as the limit.
 
 The calculation, per connected chain:
 

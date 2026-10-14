@@ -70,7 +70,10 @@ export interface NodeResult {
   activity: number
   inputs: InputPort[]
   outputs: OutputPort[]
-  /** Recipe nodes: machines and clock as they'd be built. */
+  /**
+   * Recipe nodes, and flexible extractors that can be built anywhere (water):
+   * machines and clock as they'd be built.
+   */
   setup?: MachineSetup
   /** Extractor nodes: the clock the extractors actually need to run at. */
   clock?: number
@@ -177,6 +180,11 @@ interface Unit {
   machine?: Machine
   /** Extractors: output of the configured sites at the configured clock. */
   configured?: number
+  /**
+   * Flexible extractors that can be built anywhere: output of one at 100%.
+   * They are sized like machines instead of overclocking the configured sites.
+   */
+  perExtractor?: number
   /** Outputs the node isn't run for: a recipe's extra outputs, a generator's waste. */
   byproducts: Set<ItemId>
   /**
@@ -225,12 +233,14 @@ function unitOf(node: PlanNode, catalog: Catalog): Unit | undefined {
       const machine = catalog.machines.get(node.machine)
       if (!machine?.extraction || !catalog.items.has(node.resource)) return undefined
       const configured = extractorRate(machine, node, catalog.purities)
+      const anywhere = machine.extraction.anywhere && !node.limited
       return {
         inputs: new Map(),
         outputs: new Map([[node.resource, 1]]),
         limit: node.limited ? configured : undefined,
         machine,
-        configured,
+        configured: anywhere ? undefined : configured,
+        perExtractor: anywhere ? machine.extraction.ratePerMin * outputMultiplier(machine, node.sloops) : undefined,
         byproducts: NONE,
       }
     }
@@ -759,6 +769,18 @@ function assemble(
           message: `Needs ${Math.round(setup.clock * 100)}% clock, above the machine's maximum.`,
         })
       }
+    } else if (n.kind === 'extractor' && unit.machine && unit.perExtractor !== undefined) {
+      // As many extractors as the demand needs, like a flexible recipe node.
+      const setup = machineSetup(unit.machine, unit.perExtractor > EPS ? a / unit.perExtractor : 0, mode, { clock: n.clock })
+      res.setup = setup
+      res.powerMw = groupPowerMw(unit.machine, setup.count, setup.clock, n.sloops)
+      if (setup.count > EPS) {
+        machines.set(unit.machine.id, (machines.get(unit.machine.id) ?? 0) + setup.count)
+        const built = Math.ceil(setup.count - EPS)
+        shards += setup.shards * built
+        sloops += Math.min(n.sloops, unit.machine.amplifier?.slots ?? 0) * built
+      }
+      add(raw, n.resource, a)
     } else if (n.kind === 'extractor' && unit.machine) {
       const configured = unit.configured ?? 0
       const clock = configured > EPS ? (n.clock * a) / configured : 0

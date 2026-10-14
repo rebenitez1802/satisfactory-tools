@@ -100,6 +100,7 @@ for (const [id, extra] of Object.entries(EXTRACTORS)) {
     extraction: {
       ...extraction,
       usesPurity: extra.usesPurity,
+      ...(extra.anywhere ? { anywhere: true } : {}),
       ...(extra.poweredBy ? { poweredBy: extra.poweredBy } : {}),
     },
   })

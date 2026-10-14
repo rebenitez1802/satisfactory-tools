@@ -20,7 +20,9 @@ scripts/                           build-time importers (not shipped)
    - `Item`: has a form (`solid` / `liquid` / `gas`; fluids in m³).
    - `Machine`: power, clock limits, Somersloop slots, ports, and an optional
      `extraction` spec for miners and extractors, or `generation` (MW made)
-     for generators.
+     for generators. `extraction.anywhere` marks extractors that aren't tied
+     to resource nodes (the Water Extractor goes on any water), so any number
+     can be built.
    - Generators run recipes like any machine: one per fuel. A cycle burns one
      unit of fuel (1 item, or 1 m³ of a fluid fuel) for `energyMJ / MW`
      seconds; water and waste are per cycle. Generator recipes may have no

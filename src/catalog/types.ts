@@ -98,6 +98,12 @@ export interface ExtractionSpec {
   /** False for extractors that ignore purity (water extractor). */
   usesPurity: boolean
   /**
+   * Built anywhere rather than on resource nodes (water extractors go on any
+   * water), so any number can be built. A flexible group is then sized like
+   * machines: more extractors at the preferred clock, not one overclocked.
+   */
+  anywhere?: boolean
+  /**
    * Machine that powers this extractor's sites instead of each site drawing its
    * own power, e.g. resource-well satellites are driven by one pressurizer.
    * The planner charges this machine's power once per extractor node.
