@@ -11,7 +11,7 @@ import { Handle, Position, type Node, type NodeProps } from '@xyflow/react'
 import type { ReactNode } from 'react'
 import type { Item, ItemId, Machine } from '../../catalog'
 import type { ExtractorNode, GoalNode, InputPort, NodeResult, OutputPort, PlanNode, RecipeNode, SupplyNode } from '../../planner'
-import { doneShortfall } from '../../planner'
+import { doneShortfall, shortfall } from '../../planner'
 import { fmt, mw, pct } from './format'
 import { Icon } from './Icon'
 import { usePlanner } from './plannerContext'
@@ -38,16 +38,19 @@ function InPort({ nodeId, port }: { nodeId: string; port: InputPort }) {
   const { result } = usePlanner()
   const item = useItem(port.item)
   const missing = !port.connected && port.needed > EPS
+  // Fed only by a byproduct loop that brings back too little.
+  const short = shortfall(port)
   const merge = result.merges.find((m) => m.node === nodeId && m.item === port.item)
   const tip =
     `${item.name}: needs ${fmt(port.needed)}${unit(item)}` +
     (missing ? ' — not connected. Drag onto a node to connect, or onto empty space to add a producer.' : '') +
+    (short ? `, its belts bring ${fmt(port.supplied)}: ${fmt(short)} short. Connect another producer for the rest.` : '') +
     (port.connected ? ' — drag to move its belt to another node, or onto empty space to remove it.' : '') +
     (merge ? ` · ${merge.edges.length} belts merge here` : '')
   return (
-    <div className={`pn-port pn-port-in${missing ? ' pn-port-missing pn-port-rated' : ''}${port.connected ? ' pn-port-connected' : ''}`}>
+    <div className={`pn-port pn-port-in${missing || short ? ' pn-port-missing pn-port-rated' : ''}${port.connected ? ' pn-port-connected' : ''}`}>
       <Icon of={item} size={24} title={tip} />
-      {missing && <span className="pn-port-rate">{fmt(port.needed)}</span>}
+      {(missing || short > 0) && <span className="pn-port-rate">{fmt(missing ? port.needed : short)}</span>}
       {merge && <span className="pn-port-mark">⑃</span>}
       <Handle type="target" position={Position.Left} id={inHandle(port.item)} className={`pn-handle pn-${item.form}`} title={tip} />
     </div>

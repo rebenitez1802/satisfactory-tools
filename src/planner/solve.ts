@@ -29,8 +29,18 @@
 // for is still pulled like a main product. Stages can share nodes upstream
 // (one Water Extractor for the reactors and their waste chain): a later stage
 // adds its demand to theirs and gets what is left of their limits.
+//
+// A byproduct belt that loops back into its maker's own chain (aluminum
+// scrap's water piped to the Alumina Solution that feeds it) can't be cut
+// into a later stage, but pulling it makes the loop run away: more water
+// wanted, more scrap made, more alumina needed, more water wanted. So it
+// stays in the stage as a *spare* belt: it doesn't pull, it carries what the
+// maker makes, used first, and the other producers make up the rest. When
+// nothing else feeds that input, the rest is reported as missing, like an
+// unconnected input. With spare belts left out, the pulled part of the loop
+// is acyclic, so the demand pass settles in a couple of rounds.
 
-import type { Catalog, ItemId, Machine, MachineId, Recipe, TransportTierId } from '../catalog'
+import type { Catalog, Item, ItemId, Machine, MachineId, Recipe, TransportTierId } from '../catalog'
 import {
   extractorPowerMw,
   extractorRate,
@@ -51,9 +61,21 @@ export interface InputPort {
   item: ItemId
   /** What the node consumes. */
   needed: number
-  /** What its incoming edges deliver (0 when unconnected). */
+  /**
+   * What its incoming edges deliver (0 when unconnected). Less than needed
+   * only when spare belts are all that feed it (see `shortfall`).
+   */
   supplied: number
   connected: boolean
+}
+
+/**
+ * What a connected input lacks: its belts are all spare byproducts looping
+ * back, and they bring less than it needs. 0 otherwise.
+ */
+export function shortfall(port: InputPort): number {
+  const short = port.needed - port.supplied
+  return port.connected && short > EPS * Math.max(1, port.needed) ? short : 0
 }
 
 export interface OutputPort {
@@ -229,6 +251,8 @@ interface Unit {
 }
 
 const key = (node: string, item: ItemId) => `${node}\u0000${item}`
+const num = (v: number) => Number(v.toFixed(2))
+const perMin = (item?: Item) => (item && item.form !== 'solid' ? ' m³/min' : '/min')
 
 const NONE = new Set<ItemId>()
 const SPARE = '~spare:'
@@ -305,7 +329,9 @@ interface Graph {
   /** Valid edges by source port / target port. */
   out: Map<string, PlanEdge[]>
   in: Map<string, PlanEdge[]>
-  /** Consumers before producers, so a DAG settles in one pass. */
+  /** Byproduct belts looping back into their maker's chain: they carry what's spare, not what's wanted. */
+  spare: Set<string>
+  /** Consumers before producers (spare belts aside), so a DAG settles in one pass. */
   order: PlanNode[]
   component: Map<string, number>
 }
@@ -316,7 +342,7 @@ function pushTo<K, V>(map: Map<K, V[]>, k: K, v: V) {
   else map.set(k, [v])
 }
 
-function buildGraph(plan: Plan, catalog: Catalog, diagnostics: PlanDiagnostic[]): Graph {
+function buildGraph(plan: Plan, catalog: Catalog, diagnostics: PlanDiagnostic[], spare = new Set<string>()): Graph {
   const units = new Map<string, Unit>()
   for (const n of plan.nodes) {
     const u = unitOf(n, catalog)
@@ -341,11 +367,13 @@ function buildGraph(plan: Plan, catalog: Catalog, diagnostics: PlanDiagnostic[])
   }
 
   // Order: a node comes after all of its consumers (reverse topological).
+  // Spare belts don't pull, so the order ignores them.
+  const pulling = edges.filter((e) => !spare.has(e.id))
   const successors = new Map<string, Set<string>>(plan.nodes.map((n) => [n.id, new Set()]))
-  for (const e of edges) successors.get(e.source)!.add(e.target)
+  for (const e of pulling) successors.get(e.source)!.add(e.target)
   const consumersLeft = new Map(plan.nodes.map((n) => [n.id, successors.get(n.id)!.size]))
   const predecessors = new Map<string, Set<string>>(plan.nodes.map((n) => [n.id, new Set()]))
-  for (const e of edges) predecessors.get(e.target)!.add(e.source)
+  for (const e of pulling) predecessors.get(e.target)!.add(e.source)
   const byId = new Map(plan.nodes.map((n) => [n.id, n]))
   const order: PlanNode[] = []
   const queue = plan.nodes.filter((n) => consumersLeft.get(n.id) === 0).map((n) => n.id)
@@ -380,7 +408,7 @@ function buildGraph(plan: Plan, catalog: Catalog, diagnostics: PlanDiagnostic[])
     component.set(n.id, roots.get(r)!)
   }
 
-  return { nodes: plan.nodes, units, edges, out, in: inn, order, component }
+  return { nodes: plan.nodes, units, edges, out, in: inn, spare, order, component }
 }
 
 interface Pass {
@@ -394,16 +422,18 @@ function demandPass(g: Graph, goalValues: Map<string, number>): Pass {
   const activity = new Map<string, number>()
   const edgeFlow = new Map<string, number>(g.edges.map((e) => [e.id, 0]))
   let converged = false
+  const fromStage = (e: PlanEdge) => !!g.units.get(e.source)!.spare
 
   for (let iter = 0; iter < MAX_ITER && !converged; iter++) {
     let maxDelta = 0
     let scale = 1
-    /** Flow handed out so far this round by each spare-byproduct supply. */
+    /** Flow handed out so far this round by each spare port. */
     const taken = new Map<string, number>()
     const take = (e: PlanEdge, f: number) => {
       edgeFlow.set(e.id, f)
-      if (g.units.get(e.source)!.spare) taken.set(e.source, (taken.get(e.source) ?? 0) + f)
+      if (g.spare.has(e.id) || fromStage(e)) taken.set(key(e.source, e.item), (taken.get(key(e.source, e.item)) ?? 0) + f)
     }
+    const left = (e: PlanEdge, available: number) => Math.max(0, available - (taken.get(key(e.source, e.item)) ?? 0))
     for (const n of g.order) {
       const unit = g.units.get(n.id)
       if (!unit) continue
@@ -411,7 +441,7 @@ function demandPass(g: Graph, goalValues: Map<string, number>): Pass {
       if (unit.anchor !== undefined) a = goalValues.get(n.id) ?? 0
       else {
         for (const [item, perUnit] of unit.outputs) {
-          const demand = (g.out.get(key(n.id, item)) ?? []).reduce((s, e) => s + edgeFlow.get(e.id)!, 0)
+          const demand = (g.out.get(key(n.id, item)) ?? []).reduce((s, e) => (g.spare.has(e.id) ? s : s + edgeFlow.get(e.id)!), 0)
           if (perUnit > 0) a = Math.max(a, demand / perUnit)
         }
       }
@@ -423,17 +453,28 @@ function demandPass(g: Graph, goalValues: Map<string, number>): Pass {
         const feeding = g.in.get(key(n.id, item))
         if (!feeding) continue
         let need = a * perUnit
-        // Spare byproducts go first; the other producers make up the rest.
-        const rest = feeding.filter((e) => !g.units.get(e.source)!.spare)
-        if (rest.length && rest.length < feeding.length) {
-          for (const e of feeding) {
-            if (!g.units.get(e.source)!.spare) continue
-            const f = Math.min(need, Math.max(0, g.units.get(e.source)!.limit! - (taken.get(e.source) ?? 0)))
+        // Spare byproducts go first: those looping back, at what their maker
+        // makes this round, then those from earlier stages if other producers
+        // can make up the rest. The others share what is still needed.
+        for (const e of feeding) {
+          if (!g.spare.has(e.id)) continue
+          const src = g.units.get(e.source)!
+          const f = Math.min(need, left(e, (activity.get(e.source) ?? 0) * src.outputs.get(e.item)!))
+          take(e, f)
+          need -= f
+        }
+        const rest = feeding.filter((e) => !g.spare.has(e.id) && !fromStage(e))
+        const staged = feeding.filter(fromStage)
+        if (rest.length) {
+          for (const e of staged) {
+            const f = Math.min(need, left(e, g.units.get(e.source)!.limit!))
             take(e, f)
             need -= f
           }
         }
-        const split = rest.length ? rest : feeding
+        // A stage's lone spare supply is pulled in full, so the targets scale
+        // to it. With only spare belts, what they can't bring is missing.
+        const split = rest.length ? rest : staged
         const shares = split.reduce((s, e) => s + (e.share ?? 1), 0)
         for (const e of split) take(e, (need * (e.share ?? 1)) / shares)
       }
@@ -478,7 +519,8 @@ interface Stage {
 
 /**
  * Cut the plan into stages (see the top of this file), in solving order.
- * `cross` are the byproduct belts that were cut.
+ * `cross` are the byproduct belts that were cut, `spare` the ones that loop
+ * back into their maker's chain instead (by id).
  *
  * A node's stage is how many cut belts lie on its longest way in, so a
  * byproduct's consumers always come after its maker. The stages are not
@@ -486,7 +528,7 @@ interface Stage {
  * its own, so a Water Extractor or a smelter line feeding both a reactor and
  * its waste chain serves both, and adds up what each asks of it.
  */
-function splitStages(g: Graph): { stages: Stage[]; cross: PlanEdge[] } {
+function splitStages(g: Graph): { stages: Stage[]; cross: PlanEdge[]; spare: Set<string> } {
   const ids = g.nodes.filter((n) => g.units.has(n.id)).map((n) => n.id)
   const byproduct = (e: PlanEdge) => g.units.get(e.source)!.byproducts.has(e.item)
   const reachable = (from: string[], next: Map<string, string[]>) => {
@@ -499,11 +541,18 @@ function splitStages(g: Graph): { stages: Stage[]; cross: PlanEdge[] } {
   for (const e of g.edges) pushTo(downstream, e.source, e.target)
   // A byproduct only arrives as spare when its maker has an anchor to run for
   // down its main products; otherwise the consumer's demand is what runs the
-  // maker. Belts that loop back into their maker's own chain stay pulled too.
+  // maker. Belts that loop back into their maker's own chain stay in its
+  // stage, as spare belts.
   const feeders = new Map<string, string[]>()
   for (const e of g.edges) if (!byproduct(e)) pushTo(feeders, e.target, e.source)
   const runsFor = reachable(ids.filter((id) => g.units.get(id)!.anchor !== undefined), feeders)
-  const cross = g.edges.filter((e) => byproduct(e) && runsFor.has(e.source) && !reachable([e.target], downstream).has(e.source))
+  const cross: PlanEdge[] = []
+  const spare = new Set<string>()
+  for (const e of g.edges) {
+    if (!byproduct(e) || !runsFor.has(e.source)) continue
+    if (reachable([e.target], downstream).has(e.source)) spare.add(e.id)
+    else cross.push(e)
+  }
   const cut = new Set(cross)
 
   // Longest way in, counting cut belts. No loop holds a cut belt, so it settles.
@@ -524,13 +573,13 @@ function splitStages(g: Graph): { stages: Stage[]; cross: PlanEdge[] } {
     const nodes = [...reachable(own, upstream)]
     stages.push({ nodes, borrowed: new Set(nodes.filter((id) => depth.get(id)! < k)) })
   }
-  return { stages, cross }
+  return { stages, cross, spare }
 }
 
 export function solvePlan(plan: Plan, catalog: Catalog): SolveResult {
   const diagnostics: PlanDiagnostic[] = []
   const whole = buildGraph(plan, catalog, diagnostics)
-  const { stages, cross } = splitStages(whole)
+  const { stages, cross, spare } = splitStages(whole)
 
   const pass: Pass = { activity: new Map(), edgeFlow: new Map(whole.edges.map((e) => [e.id, 0])), converged: true }
   const goalValues = new Map<string, number>()
@@ -572,7 +621,7 @@ export function solvePlan(plan: Plan, catalog: Catalog): SolveResult {
       edges: [...whole.edges.filter((e) => !cutEdges.has(e) && inStage.has(e.target)), ...arriving],
     }
     const real = (id: string) => makerOf.get(id) ?? id
-    const sol = solveStage(sub, catalog, feeds, pass.activity)
+    const sol = solveStage(sub, catalog, feeds, pass.activity, spare)
     for (const [id, a] of sol.pass.activity) if (!makerOf.has(id)) add(pass.activity, id, a)
     for (const [id, f] of sol.pass.edgeFlow) add(pass.edgeFlow, id, f)
     pass.converged &&= sol.pass.converged
@@ -614,11 +663,18 @@ interface StageSolution {
 /**
  * `feeds`: nodes with anything connected downstream in the whole plan.
  * `usedBefore`: what earlier stages already take of each node.
+ * `spare`: byproduct belts looping back into their maker's chain.
  */
-function solveStage(stage: Plan, catalog: Catalog, feeds: Set<string>, usedBefore: Map<string, number>): StageSolution {
+function solveStage(
+  stage: Plan,
+  catalog: Catalog,
+  feeds: Set<string>,
+  usedBefore: Map<string, number>,
+  spare: Set<string>,
+): StageSolution {
   const plan = withOpenEnds(stage, catalog, feeds)
   const diagnostics: PlanDiagnostic[] = []
-  const g = buildGraph(plan, catalog, [])
+  const g = buildGraph(plan, catalog, [], spare)
   for (const [id, u] of g.units) if (u.limit !== undefined) u.limit = Math.max(0, u.limit - (usedBefore.get(id) ?? 0))
   const goals = plan.nodes.filter((n) => g.units.get(n.id)?.anchor !== undefined)
   const anchor = (id: string) => g.units.get(id)!.anchor!
@@ -766,7 +822,22 @@ function assemble(
       const leaving = g.out.get(key(n.id, item))
       return { item, produced: a * per, used: flowOf(leaving), connected: !!leaving }
     })
-    for (const p of inputs) if (!p.connected) add(missing, p.item, p.needed)
+    for (const p of inputs) {
+      if (!p.connected) {
+        add(missing, p.item, p.needed)
+        continue
+      }
+      // Only spare belts feed it, and they bring too little: the rest is missing too.
+      const short = shortfall(p)
+      if (!pass.converged || !short) continue
+      add(missing, p.item, short)
+      const item = catalog.items.get(p.item)
+      diagnostics.push({
+        severity: 'warning',
+        nodeId: n.id,
+        message: `${item?.name ?? p.item} is ${num(short)}${perMin(item)} short: the loop brings back ${num(p.supplied)} of the ${num(p.needed)} it needs. Connect another producer for the rest.`,
+      })
+    }
     if (n.kind !== 'goal') for (const p of outputs) add(surplus, p.item, p.produced - p.used)
     for (const p of outputs) {
       const item = catalog.items.get(p.item)
@@ -775,7 +846,7 @@ function assemble(
         diagnostics.push({
           severity: 'warning',
           nodeId: n.id,
-          message: `${Number(left.toFixed(2))} ${item.name}/min is left over and can't be sunk: process it or store it, or the machines stop when storage fills.`,
+          message: `${num(left)} ${item.name}/min is left over and can't be sunk: process it or store it, or the machines stop when storage fills.`,
         })
       }
     }

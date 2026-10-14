@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import type { Catalog, ItemId } from '../../catalog'
-import { builtCount, duplicateNodes, markDone, newNodeId, openInputs, removeNodes, setRecipe, solvePlan, updateNode, validatePlan } from '../../planner'
+import { builtCount, duplicateNodes, markDone, missingInputs, newNodeId, removeNodes, setRecipe, solvePlan, updateNode, validatePlan } from '../../planner'
 import type { Plan, PlanEdge, PlanNode, PlanSettings } from '../../planner'
 import { AlternatesModal } from './AlternatesModal'
 import { BalancerPopup } from './BalancerPopup'
@@ -250,9 +250,9 @@ function Planner() {
       removeEdges: (ids) => setPlan((p) => ({ ...p, edges: p.edges.filter((e) => !ids.includes(e.id)) })),
       duplicate: (ids) => setPlan((p) => duplicateNodes(p, ids, newNodeId)),
       markDone: mark,
-      buildChain: (id) => canvas.current?.buildChain(openInputs(planRef.current, catalog, { node: id })),
+      buildChain: (id) => canvas.current?.buildChain(missingInputs(planRef.current, catalog, result, { node: id })),
     }),
-    [update, setPlan, catalog, rememberRecipe, mark],
+    [update, setPlan, catalog, rememberRecipe, mark, result],
   )
   const updateSettings = useCallback(
     (patch: Partial<PlanSettings>) => setPlan((p) => ({ ...p, settings: { ...p.settings, ...patch } })),
@@ -317,7 +317,7 @@ function Planner() {
             onEdgeStyle={(edgeStyle) => updatePrefs({ edgeStyle })}
             buildReuse={prefs.buildReuse}
             onBuildReuse={(buildReuse) => updatePrefs({ buildReuse })}
-            onBuild={(item) => canvas.current?.buildChain(openInputs(plan, catalog, { item }))}
+            onBuild={(item) => canvas.current?.buildChain(missingInputs(plan, catalog, result, { item }))}
           />
         </section>
         <section className="panel graph-panel pn-graph-panel">

@@ -32,7 +32,7 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | 13 | [Inspector covering cards](#13-inspector-covering-cards) | M3 | Low | S | Done (PR #11) |
 | 14 | [Belt line style in the balancer](#14-belt-line-style-in-the-balancer) | M3 | Low | XS | Later |
 | 15 | [Power goal](#15-power-goal) | M3 | Low | S–M | Later |
-| 16 | [Byproduct loops](#16-byproduct-loops) | M3 | High | M–L | Later, needs design |
+| 16 | [Byproduct loops](#16-byproduct-loops) | M3 | High | M–L | Done (PR #15) |
 | 18 | [How to belt or pipe a connection](#18-how-to-belt-or-pipe-a-connection) | M3 | Low | S–M | Later, after #4 |
 | 19 | [Balancer with several inputs](#19-balancer-with-several-inputs) | M2 | Med–High | M | Planned, after #4 |
 | 20 | [Build cost](#20-build-cost) | M2 | Med–High | S–M | Done (PR #12) |
@@ -56,8 +56,8 @@ and useful straight away while playing. Reorder freely.
 | 1 | Build chain | #2 | Done (PR #9). #6 and #17 reuse its node-building helpers. |
 | 2 | Refine and read | #3, #4, #13 | Done (PR #11). Closes M1. |
 | 3 | Build in game | #21, #20 | Done (PR #12). |
-| 4 | Solver core | #6 (LP core), #16 | An LP solves byproduct loops exactly; isolated because it changes rates. |
-| 5 | Optimize | #6 (UI), #11 | The Optimize action; world node counts weigh "fewest raw resources". |
+| 4 | Byproduct loops | #16 | Done (PR #15), without the LP: loops are solved with the spare-byproduct rule. Isolated because it changes rates. |
+| 5 | Optimize | #6, #11 | The LP core and the Optimize action ship together; world node counts weigh "fewest raw resources". |
 | 6 | Real belts | #19, #18 | Both turn one logical flow into belts you can build, and share a helper that puts machines onto belts. Builds on #4's belt counts. |
 | 7 | Use leftovers | #17 | Builds on #2 (adding nodes) and #6 (ranking suggestions). |
 | any time | Small standalones | #9, #15, #14 | Independent; slot one in between the big ones. |
@@ -602,7 +602,8 @@ are in [production-planner.md](production-planner.md#byproducts): spare
 byproducts flow on, Max goals get them, numeric goals fall short instead of
 growing the maker, and spare is used before other producers. Left for the
 optimizer (#6): choosing the best mix of byproduct and dedicated producers,
-and naming the missing input of a loop that can't settle. The original notes:
+and naming the missing input of a loop that can't settle (done for byproduct
+loops in #16). The original notes:
 
 **Value:** "burn my spare Heavy Oil Residue into fuel" works without adding a
 goal. **Effort:** M. The optimizer (#6) covers most of this.
@@ -636,6 +637,19 @@ overlay mode.
   skip the router and use `getStraightPath` / `getBezierPath`.
 
 ### 16. Byproduct loops
+
+**Done.** Its behaviour is in
+[production-planner.md](production-planner.md#byproducts) ("Byproducts piped
+back into their own chain"). We took the first direction below, not the LP:
+a byproduct belt that loops back into its maker's chain is a *spare belt*
+inside the maker's stage. It doesn't pull, carries what the maker makes, and
+is used first. Leaving those belts out, the pulled part of the loop has no
+cycle, so the demand pass settles in a couple of rounds, and the existing
+rules (limits, Max goals, edge shares) keep working unchanged. The LP moved
+to the Optimize PR (#6), where it has a user. What a loop can't give back is
+a missing input (`shortfall` in `solve.ts`), and ⚡ Build chain tops it up
+(`missingInputs` in `autobuild.ts`). Main-product loops (Recycled Plastic ⇄
+Rubber) are still pulled, as before. The original notes:
 
 **Value:** correctness. Loops that feed a byproduct back into their own chain
 are common, and today they break the solver. **Effort:** M–L. Needs design

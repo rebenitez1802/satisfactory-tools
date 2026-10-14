@@ -24,6 +24,7 @@
 import type { Catalog, ItemId, Machine, Recipe, RecipeId } from '../catalog'
 import { createNode, type PickOption } from './create'
 import { connectPorts, portsOf } from './edit'
+import { shortfall, type SolveResult } from './solve'
 import type { Plan, PlanNode } from './types'
 
 export interface BuildOptions {
@@ -41,6 +42,11 @@ export interface BuildOptions {
 export interface PortRef {
   node: string
   item: ItemId
+  /**
+   * The port has belts, but they bring too little (a byproduct loop that
+   * gives back less than it takes): add a producer next to them.
+   */
+  topUp?: boolean
 }
 
 const MAX_DEPTH = 25
@@ -76,6 +82,28 @@ export function openInputs(plan: Plan, catalog: Catalog, only: { node?: string; 
     }
   }
   return out
+}
+
+/**
+ * Inputs that need a producer: those with no belt yet, and those whose belts
+ * bring too little (see `shortfall`), optionally only on one node or for one
+ * item.
+ */
+export function missingInputs(
+  plan: Plan,
+  catalog: Catalog,
+  result: SolveResult,
+  only: { node?: string; item?: ItemId } = {},
+): PortRef[] {
+  const short: PortRef[] = []
+  for (const res of result.nodes.values()) {
+    if (only.node !== undefined && res.id !== only.node) continue
+    for (const port of res.inputs) {
+      if (only.item !== undefined && port.item !== only.item) continue
+      if (shortfall(port)) short.push({ node: res.id, item: port.item, topUp: true })
+    }
+  }
+  return [...openInputs(plan, catalog, only), ...short]
 }
 
 /**
@@ -166,7 +194,7 @@ function downstreamOf(plan: Plan, id: string): Set<string> {
 /**
  * Give every port in `start` a producer, and those producers theirs, down to
  * raw resources. Ports that already have a belt are left alone, so building
- * twice adds nothing.
+ * twice adds nothing, unless they are marked `topUp`.
  */
 export function buildUpstream(
   plan: Plan,
@@ -182,9 +210,11 @@ export function buildUpstream(
 
   const reusable = (item: ItemId, consumer: string): string | undefined => {
     const below = downstreamOf(p, consumer)
+    const feeding = new Set(p.edges.filter((e) => e.target === consumer && e.item === item).map((e) => e.source))
     return p.nodes.find(
       (n) =>
         !below.has(n.id) &&
+        !feeding.has(n.id) &&
         mainProduct(n, catalog) === item &&
         (n.kind !== 'recipe' || !n.limited),
     )?.id
@@ -194,8 +224,8 @@ export function buildUpstream(
     for (const { item } of openInputs(p, catalog, { node: id })) fill(id, item, path, depth)
   }
 
-  const fill = (consumer: string, item: ItemId, path: ReadonlySet<ItemId>, depth: number) => {
-    if (p.edges.some((e) => e.target === consumer && e.item === item)) return
+  const fill = (consumer: string, item: ItemId, path: ReadonlySet<ItemId>, depth: number, topUp = false) => {
+    if (!topUp && p.edges.some((e) => e.target === consumer && e.item === item)) return
     const existing = reuse ? reusable(item, consumer) : undefined
     if (existing) {
       p = connectPorts(p, catalog, existing, item, 'out', consumer)
@@ -216,8 +246,8 @@ export function buildUpstream(
     fillNode(node.id, new Set([...path, item]), depth + 1)
   }
 
-  for (const { node, item } of start) {
-    if (p.nodes.some((n) => n.id === node)) fill(node, item, new Set(), 0)
+  for (const { node, item, topUp } of start) {
+    if (p.nodes.some((n) => n.id === node)) fill(node, item, new Set(), 0, topUp)
   }
   return { plan: p, added }
 }
