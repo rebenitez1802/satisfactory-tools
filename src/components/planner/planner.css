@@ -705,6 +705,10 @@
   width: auto;
   margin-top: 0;
 }
+.pn-toolbar .pn-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
 .pn-empty {
   margin-top: 120px;
   padding: 20px 22px;

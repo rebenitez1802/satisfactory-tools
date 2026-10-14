@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import {
   Background,
+  ControlButton,
   Controls,
   MiniMap,
   Panel,
@@ -22,6 +23,7 @@ import {
   copyNodes,
   createNode,
   goalOptions,
+  layoutPlan,
   newNodeId,
   pasteClip,
   placeBeside,
@@ -64,7 +66,11 @@ interface PickerState {
   beside?: boolean
 }
 
-const FIT_VIEW = { padding: 0.15, maxZoom: 1 }
+// Fitting never zooms out so far that cards can't be read: a plan too big
+// for that stays centered and scrolls. Zooming out by hand stops at
+// MIN_ZOOM, still enough to see a whole factory's shape.
+const FIT_VIEW = { padding: 0.15, maxZoom: 1, minZoom: 0.55 }
+const MIN_ZOOM = 0.3
 
 /**
  * The plan graph on a React Flow canvas. The plan is the source of truth:
@@ -88,7 +94,7 @@ export function PlanCanvas({
   const [selectedEdges, setSelectedEdges] = useState<Set<string>>(new Set())
   const [picker, setPicker] = useState<PickerState | null>(null)
   const wrapper = useRef<HTMLDivElement>(null)
-  const { screenToFlowPosition, flowToScreenPosition, getViewport, setCenter } = useReactFlow()
+  const { screenToFlowPosition, flowToScreenPosition, getViewport, setCenter, fitView } = useReactFlow()
   const { catalog, isRecipeHidden } = usePlanner()
 
   // Nodes to select after the next rebuild (freshly pasted or duplicated ones).
@@ -371,6 +377,48 @@ export function PlanCanvas({
     return () => window.removeEventListener('keydown', onKey)
   }, [setPlan])
 
+  // Tidy layout: the selection if two or more nodes are selected, else the
+  // whole plan. One setPlan (one undo step), then fit the view once React
+  // Flow has the new positions.
+  const selectedCount = rfNodes.filter((n) => n.selected).length
+  const pendingFit = useRef<string[] | null>(null)
+  const tidy = useCallback(() => {
+    const selected = rfNodesRef.current.filter((n) => n.selected).map((n) => n.id)
+    const only = selected.length >= 2 ? selected : undefined
+    const sizes = new Map(
+      rfNodesRef.current.map((n) => [n.id, { w: n.measured?.width ?? CARD_W, h: n.measured?.height ?? 100 }]),
+    )
+    const moved = layoutPlan(planRef.current, sizes, { only })
+    if (!moved.size) return
+    pendingFit.current = only ?? []
+    const same = planRef.current.nodes.every((n) => !moved.has(n.id) || (moved.get(n.id)!.x === n.position.x && moved.get(n.id)!.y === n.position.y))
+    // Already tidy: just fit, without an empty undo step.
+    if (same) return setRfNodes((ns) => [...ns])
+    setPlan((p) => ({ ...p, nodes: p.nodes.map((n) => (moved.has(n.id) ? { ...n, position: moved.get(n.id)! } : n)) }))
+  }, [setPlan])
+  useEffect(() => {
+    const ids = pendingFit.current
+    if (!ids) return
+    pendingFit.current = null
+    fitView({ ...FIT_VIEW, duration: 300, nodes: ids.length ? ids.map((id) => ({ id })) : undefined })
+  }, [rfNodes, fitView])
+
+  // Zoom to the selected nodes, or the whole plan if nothing is selected (F).
+  const zoomToSelection = useCallback(() => {
+    const selected = rfNodesRef.current.filter((n) => n.selected).map((n) => ({ id: n.id }))
+    fitView({ ...FIT_VIEW, duration: 300, nodes: selected.length ? selected : undefined })
+  }, [fitView])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'f' || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
+      if ((e.target as Element)?.closest?.('input, select, textarea')) return
+      e.preventDefault()
+      zoomToSelection()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [zoomToSelection])
+
   // A picker for a node that no longer exists (deleted, undone, plan switched) closes.
   useEffect(() => {
     if (picker?.anchor && !plan.nodes.some((n) => n.id === picker.anchor!.node)) setPicker(null)
@@ -415,7 +463,7 @@ export function PlanCanvas({
         zoomOnDoubleClick={false}
         fitView
         fitViewOptions={FIT_VIEW}
-        minZoom={0.1}
+        minZoom={MIN_ZOOM}
         proOptions={{ hideAttribution: true }}
       >
         <Panel position="top-left" className="pn-toolbar">
@@ -428,7 +476,20 @@ export function PlanCanvas({
           <button type="button" className="pn-button pn-button-quiet" onClick={() => openPalette()}>
             + Add anything
           </button>
-          <span className="pn-canvas-hint">drag an item onto a node to connect, onto empty space to extend · drag a connected input away to remove its belt · ⌘/Ctrl C, V, D</span>
+          <button
+            type="button"
+            className="pn-button pn-button-quiet"
+            onClick={tidy}
+            disabled={plan.nodes.length < 2}
+            title={
+              selectedCount >= 2
+                ? 'Arrange the selected nodes left to right; the rest stay put'
+                : 'Arrange the whole plan left to right, resources → goals (select nodes to tidy only those)'
+            }
+          >
+            ⇶ {selectedCount >= 2 ? 'Tidy selection' : 'Tidy layout'}
+          </button>
+          <span className="pn-canvas-hint">drag an item onto a node to connect, onto empty space to extend · drag a connected input away to remove its belt · ⌘/Ctrl C, V, D · F zooms to the selection</span>
         </Panel>
         {plan.nodes.length === 0 && !picker && (
           <Panel position="top-center" className="pn-empty">
@@ -446,7 +507,13 @@ export function PlanCanvas({
           </Panel>
         )}
         <Background gap={20} color="#243040" />
-        <Controls />
+        <Controls>
+          <ControlButton onClick={zoomToSelection} title="Zoom to selection (F)" aria-label="Zoom to selection">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M2 2h7v3H5v4H2zM22 2h-7v3h4v4h3zM2 22h7v-3H5v-4H2zM22 22h-7v-3h4v-4h3zM9 9h6v6H9z" />
+            </svg>
+          </ControlButton>
+        </Controls>
         <MiniMap pannable zoomable nodeStrokeWidth={0} bgColor="#0d1117" maskColor="rgba(5, 8, 12, 0.6)" nodeColor={miniMapColor} />
       </ReactFlow>
       {picker && (

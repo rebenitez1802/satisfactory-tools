@@ -15,11 +15,11 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 
 | # | Item | Milestone | Value | Effort | Status |
 |---|---|---|---|---|---|
-| 1 | [Auto-layout](#1-auto-layout) | M1 | High | S | Next |
+| 1 | [Auto-layout](#1-auto-layout) | M1 | High | S | Done |
 | 2 | [Auto-build upstream](#2-auto-build-upstream-mode-2) | M1 | Very high | M | Next |
 | 3 | [Compare recipes at this node's rate](#3-compare-recipes-at-this-nodes-rate) | M1 | High | S | Next |
 | 4 | [Belt counts instead of red edges](#4-belt-counts-instead-of-red-edges) | M1 | Medium | XS–S | Next |
-| 5 | [Better default zoom](#5-better-default-zoom) | M1 | Low–Med | XS | Next |
+| 5 | [Better default zoom](#5-better-default-zoom) | M1 | Low–Med | XS | Done |
 | 6 | [Optimizer](#6-optimizer-mode-3) | M2 | Very high | L | Planned |
 | 7 | [Split shares on outputs](#7-split-shares-on-outputs) | M2 | Medium | S–M | Planned |
 | 8 | [Generators and net power](#8-generators-and-net-power) | M2 | Med–High | M | Planned |
@@ -42,6 +42,12 @@ into `production-planner.md`.
 click, which the player then refines. Do the items in order: #2 depends on #1.
 
 ### 1. Auto-layout
+
+**Done.** Its behaviour is in
+[production-planner.md](production-planner.md#interaction) ("Tidy layout").
+For #2: call `layoutPlan(plan, sizes, { only: newIds })`. The new nodes are
+anchored to the existing node they have the most belts with, which is the
+node the build started from.
 
 **Value:** tidies hand-built plans, and is needed so auto-built chains are
 readable. **Effort:** S.
@@ -171,6 +177,9 @@ groups, so 240/min on Mk.2 really means "2 belts". **Effort:** XS–S.
 - **Tests:** a solver unit test for `beltsNeeded`, and a screenshot.
 
 ### 5. Better default zoom
+
+**Done** (shipped with #1). Its behaviour is in
+[production-planner.md](production-planner.md#interaction) ("Zoom").
 
 **Value:** cards are hard to read on wide plans. **Effort:** XS.
 
