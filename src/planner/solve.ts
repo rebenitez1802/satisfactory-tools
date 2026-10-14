@@ -77,6 +77,12 @@ export interface NodeResult {
   setup?: MachineSetup
   /** Limited extractor nodes: the clock the extractors actually need to run at. */
   clock?: number
+  /**
+   * Power shards and Somersloops in each machine (or extractor) as built, and
+   * how many are built (whole). Totals are `each × built`. Absent when the
+   * group builds nothing.
+   */
+  upgrades?: { shardsEach: number; sloopsEach: number; built: number }
   /** Power drawn, in MW. */
   powerMw: number
   /** Generators: power made, in MW. */
@@ -724,6 +730,11 @@ function assemble(
   const flowOf = (edges: PlanEdge[] | undefined) => (edges ?? []).reduce((s, e) => s + pass.edgeFlow.get(e.id)!, 0)
   // Activity of one machine (or extractor) of a group, for belt warnings.
   const oneMachine = new Map<string, number>()
+  const upgrade = (res: NodeResult, machine: Machine, shardsEach: number, sloopsEach: number, built: number) => {
+    res.upgrades = { shardsEach, sloopsEach: Math.min(sloopsEach, machine.amplifier?.slots ?? 0), built }
+    shards += res.upgrades.shardsEach * built
+    sloops += res.upgrades.sloopsEach * built
+  }
 
   for (const n of plan.nodes) {
     const unit = g.units.get(n.id)
@@ -781,9 +792,7 @@ function assemble(
       }
       if (setup.count > EPS) {
         machines.set(unit.machine.id, (machines.get(unit.machine.id) ?? 0) + setup.count)
-        const built = Math.ceil(setup.count - EPS)
-        shards += setup.shards * built
-        sloops += Math.min(n.sloops, unit.machine.amplifier?.slots ?? 0) * built
+        upgrade(res, unit.machine, setup.shards, n.sloops, Math.ceil(setup.count - EPS))
       }
       if (!setup.feasible) {
         diagnostics.push({
@@ -803,9 +812,7 @@ function assemble(
       if (setup.count > EPS) {
         machines.set(unit.machine.id, (machines.get(unit.machine.id) ?? 0) + setup.count)
         if (by) machines.set(by, (machines.get(by) ?? 0) + 1)
-        const built = Math.ceil(setup.count - EPS)
-        shards += setup.shards * built
-        sloops += Math.min(n.sloops, unit.machine.amplifier?.slots ?? 0) * built
+        upgrade(res, unit.machine, setup.shards, n.sloops, Math.ceil(setup.count - EPS))
       }
       add(raw, n.resource, a)
     } else if (n.kind === 'extractor' && unit.machine) {
@@ -822,8 +829,7 @@ function assemble(
       if (a > EPS) {
         machines.set(unit.machine.id, (machines.get(unit.machine.id) ?? 0) + sites)
         if (by) machines.set(by, (machines.get(by) ?? 0) + 1)
-        shards += shardsNeeded(unit.machine, clock) * sites
-        sloops += Math.min(n.sloops, unit.machine.amplifier?.slots ?? 0) * sites
+        upgrade(res, unit.machine, shardsNeeded(unit.machine, clock), n.sloops, sites)
       }
       add(raw, n.resource, a)
     } else if (n.kind === 'supply') {

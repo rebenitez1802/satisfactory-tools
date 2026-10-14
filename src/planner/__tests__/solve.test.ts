@@ -278,6 +278,8 @@ describe('solver', () => {
     expect(r.nodes.get('plate')!.setup).toMatchObject({ count: 1, shards: 3 })
     expect(r.totals.shards).toBe(3)
     expect(r.totals.sloops).toBe(1)
+    expect(r.nodes.get('plate')!.upgrades).toEqual({ shardsEach: 3, sloopsEach: 1, built: 1 })
+    expect(r.nodes.get('smelt')!.upgrades).toEqual({ shardsEach: 0, sloopsEach: 0, built: 3 })
     expect(r.nodes.get('plate')!.powerMw).toBeCloseTo(4 * 4 * 2.5 ** 1.321929)
   })
 
@@ -410,7 +412,17 @@ describe('flexible extractors', () => {
   it('keeps an overclock the player asked for', () => {
     const r = pumps(water({ clock: 2.5 }), 900)
     expect(r.nodes.get('water')!.setup).toMatchObject({ count: expect.closeTo(3), clock: 2.5, shards: 3 })
+    expect(r.nodes.get('water')!.upgrades).toEqual({ shardsEach: 3, sloopsEach: 0, built: 3 })
     expect(r.totals.shards).toBe(9)
+  })
+
+  it('counts the shards of a limited, overclocked group at the clock it runs at', () => {
+    // 2 normal Mk.1 miners at 250% give up to 300 ore; 180 ore needs them at 150%.
+    const ore = extractorNode('ore', 'Build_MinerMk1_C', ORE, [{ purity: 'base:normal', count: 2 }], { limited: true, clock: 2.5 })
+    const r = ironChain(ore, 120)
+    expect(r.nodes.get('ore')!.clock).toBeCloseTo(1.5)
+    expect(r.nodes.get('ore')!.upgrades).toEqual({ shardsEach: 1, sloopsEach: 0, built: 2 })
+    expect(r.totals.shards).toBe(2)
   })
 
   it('a limited group is still a hard limit', () => {

@@ -7,9 +7,8 @@
 
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react'
 import type { ReactNode } from 'react'
-import type { Item, ItemId } from '../../catalog'
+import type { Item, ItemId, Machine } from '../../catalog'
 import type { ExtractorNode, GoalNode, InputPort, NodeResult, OutputPort, PlanNode, RecipeNode, SupplyNode } from '../../planner'
-import { sloopSlots } from '../../planner'
 import { fmt, mw, pct } from './format'
 import { Icon } from './Icon'
 import { usePlanner } from './plannerContext'
@@ -147,6 +146,38 @@ function LimitBadge({ on }: { on: boolean }) {
   ) : null
 }
 
+/** Power shards and Somersloops the group needs in total, as corner badges. */
+function UpgradeBadges({ res, machine, what = 'machine' }: { res: NodeResult; machine: Machine; what?: string }) {
+  const { catalog } = usePlanner()
+  const up = res.upgrades
+  if (!up) return null
+  const items = upgradeItems(machine, catalog)
+  return (
+    <>
+      {up.shardsEach > 0 && (
+        <span className="pn-b pn-b-up">
+          <UpgradeChip
+            item={items.shard}
+            count={up.shardsEach * up.built}
+            fallback="◆"
+            title={`${up.shardsEach} ${items.shard?.name ?? 'power shard'}(s) per ${what} × ${up.built}`}
+          />
+        </span>
+      )}
+      {up.sloopsEach > 0 && (
+        <span className="pn-b pn-b-up">
+          <UpgradeChip
+            item={items.sloop}
+            count={up.sloopsEach * up.built}
+            fallback="◉"
+            title={`${up.sloopsEach} ${items.sloop?.name ?? 'Somersloop'}(s) per ${what} × ${up.built}`}
+          />
+        </span>
+      )}
+    </>
+  )
+}
+
 function RecipeCard({ data, selected }: NodeProps<PlanFlowNode>) {
   const node = data.node as RecipeNode
   const { catalog, result } = usePlanner()
@@ -155,9 +186,6 @@ function RecipeCard({ data, selected }: NodeProps<PlanFlowNode>) {
   const machine = catalog.machines.get(node.machine)
   if (!recipe || !machine || !res?.resolved) return <Unresolved node={node} selected={selected} />
   const setup = res.setup!
-  const sloops = Math.min(node.sloops, sloopSlots(machine))
-  const built = Math.ceil(setup.count - EPS)
-  const upgrades = upgradeItems(machine, catalog)
   const made = res.generatedMw
   const goal = result.goals.find((g) => g.id === node.id)
   const short = goal && goal.requested !== 'max' && goal.achieved < goal.requested - EPS
@@ -188,26 +216,7 @@ function RecipeCard({ data, selected }: NodeProps<PlanFlowNode>) {
             </span>
           )}
           {recipe.alternate && <span className="pn-b pn-b-alt">ALT</span>}
-          {setup.shards > 0 && (
-            <span className="pn-b pn-b-up">
-              <UpgradeChip
-                item={upgrades.shard}
-                count={setup.shards * built}
-                fallback="◆"
-                title={`${setup.shards} ${upgrades.shard?.name ?? 'power shard'}(s) per machine × ${built}`}
-              />
-            </span>
-          )}
-          {sloops > 0 && (
-            <span className="pn-b pn-b-up">
-              <UpgradeChip
-                item={upgrades.sloop}
-                count={sloops * built}
-                fallback="◉"
-                title={`${sloops} ${upgrades.sloop?.name ?? 'Somersloop'}(s) per machine × ${built}`}
-              />
-            </span>
-          )}
+          <UpgradeBadges res={res} machine={machine} />
           <LimitBadge on={node.limited} />
         </>
       }
@@ -257,7 +266,18 @@ function ExtractorCard({ data, selected }: NodeProps<PlanFlowNode>) {
     .join('\n')
 
   return (
-    <Card res={res} selected={selected} kind="extractor" tip={tip} badges={<LimitBadge on={node.limited} />}>
+    <Card
+      res={res}
+      selected={selected}
+      kind="extractor"
+      tip={tip}
+      badges={
+        <>
+          <UpgradeBadges res={res} machine={machine} what="extractor" />
+          <LimitBadge on={node.limited} />
+        </>
+      }
+    >
       <Icon of={machine} size={48} title={tip} />
       <span className="pn-big">
         {fmt(node.limited ? capacity : res.activity)}
