@@ -52,14 +52,33 @@ Every generated graph is checked by a **flow simulator** that iterates the
 network to steady state and confirms each output matches its target before the
 graph is displayed, so loop designs are proven correct, not guessed.
 
+### Production Chains
+
+Plan a factory from resource nodes to products. Add a miner on the nodes you
+have, or a goal for what you want, and build the chain on a canvas. The planner
+works out rates, machine counts (fractional, or whole and underclocked),
+overclocking, Somersloops and power. Set 🎯 targets on goals and ⛔ limits on
+sources or machine groups, and everything else sizes itself. It works forward
+("what can I make from this?"), backward ("what do I need?"), or both.
+
+When one output feeds several belts, the ⑂ badge opens a load balancer for
+those exact rates. Plans live in tabs, autosave in the browser, and export as
+JSON.
+
+Game content comes from swappable **data packs**, so mods can add machines,
+resources and recipes. See [docs/data-model.md](docs/data-model.md) and
+[docs/production-planner.md](docs/production-planner.md), which also lists the
+deferred follow-ups.
+
 ## Development
 
 ```bash
 npm install
 npm run dev        # local dev server
-npm test           # run the solver test suite
+npm test           # run the test suite
 npm run build      # production build into dist/
 npm run typecheck  # type-check only
+npm run data:base  # regenerate public/packs/base (game data + icons)
 ```
 
 ## Deployment
@@ -71,4 +90,7 @@ Build and deployment → Source: GitHub Actions**. The site is served at
 
 ---
 
-Not affiliated with Coffee Stain Studios.
+A free, non-commercial fan tool, not affiliated with Coffee Stain Studios. Game
+content and icons © Coffee Stain Studios. Icons come from the
+[Official Satisfactory Wiki](https://satisfactory.wiki.gg/), and recipe data from
+[greeny/SatisfactoryTools](https://github.com/greeny/SatisfactoryTools) (MIT).
