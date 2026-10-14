@@ -550,6 +550,12 @@ export function solvePlan(plan: Plan, catalog: Catalog): SolveResult {
   // Hide the implicit goals and their belts; keep them as goals marked open-end.
   for (const id of [...result.nodes.keys()]) if (id.startsWith(OPEN_END)) result.nodes.delete(id)
   for (const id of [...result.edges.keys()]) if (id.startsWith(OPEN_END)) result.edges.delete(id)
+  // An open end's output has no real belt; its flow still counts as used.
+  for (const e of augmented.edges) {
+    if (!e.id.startsWith(OPEN_END)) continue
+    const port = result.nodes.get(e.source)?.outputs.find((p) => p.item === e.item)
+    if (port) port.connected = false
+  }
   result.goals = result.goals.map((g) => (g.id.startsWith(OPEN_END) ? { ...g, openEndOf: g.id.slice(OPEN_END.length) } : g))
   result.diagnostics = result.diagnostics.map((d) =>
     d.nodeId?.startsWith(OPEN_END) ? { ...d, nodeId: d.nodeId.slice(OPEN_END.length) } : d,

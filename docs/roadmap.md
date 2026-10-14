@@ -15,11 +15,12 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 
 | # | Item | Milestone | Value | Effort | Status |
 |---|---|---|---|---|---|
-| 1 | [Auto-layout](#1-auto-layout) | M1 | High | S | Next |
+| 1 | [Auto-layout](#1-auto-layout) | M1 | High | S | Done (PR #5) |
 | 2 | [Auto-build upstream](#2-auto-build-upstream-mode-2) | M1 | Very high | M | Next |
 | 3 | [Compare recipes at this node's rate](#3-compare-recipes-at-this-nodes-rate) | M1 | High | S | Next |
 | 4 | [Belt counts instead of red edges](#4-belt-counts-instead-of-red-edges) | M1 | Medium | XS–S | Next |
-| 5 | [Better default zoom](#5-better-default-zoom) | M1 | Low–Med | XS | Next |
+| 5 | [Better default zoom](#5-better-default-zoom) | M1 | Low–Med | XS | Done (PR #5) |
+| — | [Rates on unconnected ports](#quick-win-rates-on-unconnected-ports) | M1 | Medium | XS | Done (PR #5) |
 | 6 | [Optimizer](#6-optimizer-mode-3) | M2 | Very high | L | Planned |
 | 7 | [Split shares on outputs](#7-split-shares-on-outputs) | M2 | Medium | S–M | Planned |
 | 8 | [Generators and net power](#8-generators-and-net-power) | M2 | Med–High | M | Done (generators branch) |
@@ -45,6 +46,12 @@ into `production-planner.md`.
 click, which the player then refines. Do the items in order: #2 depends on #1.
 
 ### 1. Auto-layout
+
+**Done.** Its behaviour is in
+[production-planner.md](production-planner.md#interaction) ("Tidy layout").
+For #2: call `layoutPlan(plan, sizes, { only: newIds })`. The new nodes are
+anchored to the existing node they have the most belts with, which is the
+node the build started from.
 
 **Value:** tidies hand-built plans, and is needed so auto-built chains are
 readable. **Effort:** S.
@@ -175,12 +182,30 @@ groups, so 240/min on Mk.2 really means "2 belts". **Effort:** XS–S.
 
 ### 5. Better default zoom
 
+**Done** (shipped with #1). Its behaviour is in
+[production-planner.md](production-planner.md#interaction) ("Zoom"). The
+user chose to keep a plan that's too big centered, and to stop zooming out
+by hand at 30% (`MIN_ZOOM`).
+
 **Value:** cards are hard to read on wide plans. **Effort:** XS.
 
 - Clamp `fitView` with a `minZoom` (about 0.55) so cards stay readable;
   scrolling is fine.
 - Add "Zoom to selection": the F key, or a button.
 - In `PlanCanvas.tsx`, see `FIT_VIEW`.
+
+### Quick win: rates on unconnected ports
+
+**Done** (shipped with #1, requested by the user). A port with no belt yet
+shows its rate under the item: red for what an input needs, amber for what an
+output makes. A newly added miner shows what it gives without hovering. The
+rules are in [production-planner.md](production-planner.md#presentation)
+("Ports").
+
+- The solver used to report an open end's output as connected, because of
+  its hidden implicit-goal belt. It now reports `connected: false`; `used`
+  still includes that flow.
+- If #4 adds belt counts, unconnected ports could show them too.
 
 ---
 

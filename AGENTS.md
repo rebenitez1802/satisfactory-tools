@@ -125,7 +125,7 @@ src/
   styles.css                Global styling (dark theme, CSS variables)
   catalog/                  Game data, framework-free: types, pack format, buildCatalog merge, icon helpers
   planner/                  Planner logic, framework-free: plan types, rates/power, solve.ts
-                            (targets & limits), create/edit/place helpers
+                            (targets & limits), create/edit/place helpers, layout.ts (Tidy, dagre)
   components/planner/       Planner UI: PlannerTool (state, tabs, history), PlanCanvas (React Flow),
                             nodes.tsx (cards), Inspector, Picker, RecipeSelect, BalancerPopup, planner.css
   components/
