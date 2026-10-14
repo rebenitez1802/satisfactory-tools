@@ -83,6 +83,12 @@ export interface NodeResult {
    * resource well's pressurizer follows its satellites. Absent: none.
    */
   buildings?: { machine: MachineId; count: number }[]
+  /**
+   * Power shards and Somersloops in each machine (or extractor) as built, and
+   * how many are built (whole). Totals are `each × built`. Absent when the
+   * group builds nothing.
+   */
+  upgrades?: { shardsEach: number; sloopsEach: number; built: number }
   /** Power drawn, in MW. */
   powerMw: number
   /** Generators: power made, in MW. */
@@ -734,6 +740,11 @@ function assemble(
     res.buildings = [...(res.buildings ?? []), { machine, count }]
     machines.set(machine, (machines.get(machine) ?? 0) + count)
   }
+  const upgrade = (res: NodeResult, machine: Machine, shardsEach: number, sloopsEach: number, built: number) => {
+    res.upgrades = { shardsEach, sloopsEach: Math.min(sloopsEach, machine.amplifier?.slots ?? 0), built }
+    shards += res.upgrades.shardsEach * built
+    sloops += res.upgrades.sloopsEach * built
+  }
 
   for (const n of plan.nodes) {
     const unit = g.units.get(n.id)
@@ -791,9 +802,7 @@ function assemble(
       }
       if (setup.count > EPS) {
         build(res, unit.machine.id, setup.count)
-        const built = Math.ceil(setup.count - EPS)
-        shards += setup.shards * built
-        sloops += Math.min(n.sloops, unit.machine.amplifier?.slots ?? 0) * built
+        upgrade(res, unit.machine, setup.shards, n.sloops, Math.ceil(setup.count - EPS))
       }
       if (!setup.feasible) {
         diagnostics.push({
@@ -813,9 +822,7 @@ function assemble(
       if (setup.count > EPS) {
         build(res, unit.machine.id, setup.count)
         if (by) build(res, by, 1)
-        const built = Math.ceil(setup.count - EPS)
-        shards += setup.shards * built
-        sloops += Math.min(n.sloops, unit.machine.amplifier?.slots ?? 0) * built
+        upgrade(res, unit.machine, setup.shards, n.sloops, Math.ceil(setup.count - EPS))
       }
       add(raw, n.resource, a)
     } else if (n.kind === 'extractor' && unit.machine) {
@@ -832,8 +839,7 @@ function assemble(
       if (a > EPS) {
         build(res, unit.machine.id, sites)
         if (by) build(res, by, 1)
-        shards += shardsNeeded(unit.machine, clock) * sites
-        sloops += Math.min(n.sloops, unit.machine.amplifier?.slots ?? 0) * sites
+        upgrade(res, unit.machine, shardsNeeded(unit.machine, clock), n.sloops, sites)
       }
       add(raw, n.resource, a)
     } else if (n.kind === 'supply') {

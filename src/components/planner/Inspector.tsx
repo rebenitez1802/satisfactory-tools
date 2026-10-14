@@ -2,7 +2,7 @@
 // as switching recipe/alternate, machine, resource and purity nodes.
 
 import { useState, type ReactNode } from 'react'
-import type { Catalog } from '../../catalog'
+import type { Catalog, Machine } from '../../catalog'
 import {
   defaultPurity,
   doneShortfall,
@@ -214,8 +214,8 @@ function NodeInspector({
               {fmt(res.setup.count)} × {catalog.machines.get((node as RecipeNode).machine)?.name ?? 'machines'} @ {pct(res.setup.clock)}
             </div>
           )}
-          {res.setup && node.kind === 'recipe' && (res.setup.shards > 0 || node.sloops > 0) && (
-            <UpgradeTotals node={node} shardsEach={res.setup.shards} count={res.setup.count} catalog={catalog} />
+          {(node.kind === 'recipe' || node.kind === 'extractor') && res.upgrades && (
+            <UpgradeTotals upgrades={res.upgrades} machine={catalog.machines.get(node.machine)} catalog={catalog} />
           )}
           {res.clock !== undefined && <div>Runs @ {pct(res.clock)}</div>}
           {res.generatedMw !== undefined ? (
@@ -470,6 +470,7 @@ function ExtractorFields({ node, catalog, actions }: { node: ExtractorNode; cata
   const what = spec.anywhere ? 'extractor' : spec.poweredBy ? 'satellite node' : 'node'
   // A flexible group sizes its own count; only its purity is a choice.
   const autoCount = !node.limited
+  const shards = shardsNeeded(machine, node.clock)
 
   return (
     <>
@@ -538,11 +539,14 @@ function ExtractorFields({ node, catalog, actions }: { node: ExtractorNode; cata
       <Field
         label="Clock speed"
         hint={
-          node.limited
-            ? `What these ${what}s give at this clock is the limit.`
-            : autoCount
-              ? `Preferred clock: the ${what} count adapts to it.`
-              : undefined
+          <>
+            {node.limited ? `What these ${what}s give at this clock is the limit.` : `Preferred clock: the ${what} count adapts to it.`}
+            {shards > 0 && (
+              <span className="pn-insp-row">
+                Needs <UpgradeChip item={upgradeItems(machine, catalog).shard} count={shards} fallback="◆" title="per extractor" size={16} /> per extractor
+              </span>
+            )}
+          </>
         }
       >
         <ClockField value={node.clock} min={minClock(machine)} max={maxClock(machine)} onChange={(clock) => actions.update(node.id, { clock })} />
@@ -560,16 +564,16 @@ function ExtractorFields({ node, catalog, actions }: { node: ExtractorNode; cata
   )
 }
 
-/** Total power shards and Somersloops a recipe group needs, with their icons. */
-function UpgradeTotals({ node, shardsEach, count, catalog }: { node: RecipeNode; shardsEach: number; count: number; catalog: Catalog }) {
-  const machine = catalog.machines.get(node.machine)
+/** Total power shards and Somersloops a machine or extractor group needs, with their icons. */
+function UpgradeTotals({ upgrades, machine, catalog }: { upgrades: NonNullable<NodeResult['upgrades']>; machine?: Machine; catalog: Catalog }) {
   const { shard, sloop } = upgradeItems(machine, catalog)
-  const built = Math.ceil(count - 1e-6)
-  const sloops = Math.min(node.sloops, sloopSlots(machine!)) * built
+  const shards = upgrades.shardsEach * upgrades.built
+  const sloops = upgrades.sloopsEach * upgrades.built
+  if (!shards && !sloops) return null
   return (
     <div className="pn-insp-row">
       Needs
-      {shardsEach > 0 && <UpgradeChip item={shard} count={shardsEach * built} fallback="◆" title={`${shard?.name ?? 'Power shards'} in total`} size={18} />}
+      {shards > 0 && <UpgradeChip item={shard} count={shards} fallback="◆" title={`${shard?.name ?? 'Power shards'} in total`} size={18} />}
       {sloops > 0 && <UpgradeChip item={sloop} count={sloops} fallback="◉" title={`${sloop?.name ?? 'Somersloops'} in total`} size={18} />}
       in total
     </div>
