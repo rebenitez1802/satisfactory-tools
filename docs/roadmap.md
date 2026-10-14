@@ -23,12 +23,12 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | — | [Rates on unconnected ports](#quick-win-rates-on-unconnected-ports) | M1 | Medium | XS | Done (PR #5) |
 | 6 | [Optimizer](#6-optimizer-mode-3) | M2 | Very high | L | Planned |
 | 7 | [Split shares on outputs](#7-split-shares-on-outputs) | M2 | Medium | S–M | Planned |
-| 8 | [Generators and net power](#8-generators-and-net-power) | M2 | Med–High | M | Done (generators branch) |
+| 8 | [Generators and net power](#8-generators-and-net-power) | M2 | Med–High | M | Done (PR #6) |
 | 9 | [Share a plan as a link](#9-share-a-plan-as-a-link) | M2 | Medium | S | Planned |
 | 17 | [Use leftovers](#17-use-leftovers) | M2 | High | M | Planned, after #2 and #6 |
 | 10 | [1.2 power multiplier](#10-12-power-multiplier) | M2 | Medium | XS | Blocked on user's rules |
 | 11 | [World node limits](#11-world-node-limits) | M3 | Medium | M | Later |
-| 12 | [Byproduct-driven chains](#12-byproduct-driven-chains) | M2 | Med–High | M | Done (generators branch) |
+| 12 | [Byproduct-driven chains](#12-byproduct-driven-chains) | M2 | Med–High | M | Done (PR #6) |
 | 13 | [Inspector covering cards](#13-inspector-covering-cards) | M3 | Low | S | Later |
 | 14 | [Belt line style in the balancer](#14-belt-line-style-in-the-balancer) | M3 | Low | XS | Later |
 | 15 | [Power goal](#15-power-goal) | M3 | Low | S–M | Later |
