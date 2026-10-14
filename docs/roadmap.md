@@ -34,6 +34,9 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | 15 | [Power goal](#15-power-goal) | M3 | Low | S–M | Later |
 | 16 | [Byproduct loops](#16-byproduct-loops) | M3 | High | M–L | Later, needs design |
 | 18 | [How to belt or pipe a connection](#18-how-to-belt-or-pipe-a-connection) | M3 | Low | S–M | Later, after #4 |
+| 19 | [Balancer with several inputs](#19-balancer-with-several-inputs) | M2 | Med–High | M | Planned, after #4 |
+| 20 | [Build cost](#20-build-cost) | M2 | Med–High | S–M | Planned |
+| 21 | [Build checklist](#21-build-checklist) | M2 | High | S | Planned |
 | — | [Mods and data tooling](#deferred-mods-and-data-tooling) | — | — | — | Deferred |
 
 When an item ships, change its status to **Done (PR #n)** and move its rules
@@ -44,17 +47,20 @@ into `production-planner.md`.
 Items are grouped into PRs by the code they touch and how much they risk,
 since every merge deploys. Changes to how the solver calculates rates get
 their own PR. Agreed with the user on 2026-10-14; one agent works through
-them in this order:
+them in this order. #19–#21 came from the user's testing of #2 on
+2026-10-14; "Build in game" goes before the solver work because it is small
+and useful straight away while playing. Reorder freely.
 
 | Order | PR | Items | Why together |
 |---|---|---|---|
-| 1 | Build chain | #2 | The largest piece; #6 and #17 reuse its node-building helpers. |
+| 1 | Build chain | #2 | Done (PR #9). #6 and #17 reuse its node-building helpers. |
 | 2 | Refine and read | #3, #4, #13 | Small polish for reading and refining a built plan; one screenshot pass. Closes M1. |
-| 3 | Solver core | #6 (LP core), #16 | An LP solves byproduct loops exactly; isolated because it changes rates. |
-| 4 | Optimize | #6 (UI), #11 | The Optimize action; world node counts weigh "fewest raw resources". |
-| 5 | Use leftovers | #17 | Builds on #2 (adding nodes) and #6 (ranking suggestions). |
+| 3 | Build in game | #21, #20 | Small and independent of the solver, and it helps right away while playing. Together the summary can show what's left to build and what it costs. |
+| 4 | Solver core | #6 (LP core), #16 | An LP solves byproduct loops exactly; isolated because it changes rates. |
+| 5 | Optimize | #6 (UI), #11 | The Optimize action; world node counts weigh "fewest raw resources". |
+| 6 | Real belts | #19, #18 | Both turn one logical flow into belts you can build, and share a helper that puts machines onto belts. Builds on #4's belt counts. |
+| 7 | Use leftovers | #17 | Builds on #2 (adding nodes) and #6 (ranking suggestions). |
 | any time | Small standalones | #9, #15, #14 | Independent; slot one in between the big ones. |
-| later | Low priority | #18 | Builds on #4's belt counts. |
 | blocked | — | #10 | Waits on the user's rules. |
 
 ---
@@ -398,6 +404,116 @@ since it reuses both.
   - 40 spare iron ore gets at least one complete tree, and the spare is gone
     once it's added.
 
+### 19. Balancer with several inputs
+
+**Value:** a realistic balancer for big flows. Asked for by the user on
+2026-10-14 while testing #2. **Effort:** M. Do it after #4, together with
+#18.
+
+- **Problem:** the ⑂ popup and "Open in Load Balancer" treat a split as one
+  input belt. Balancing 2004/min from a single source can't be built: no belt
+  carries more than 1200/min (Mk.6). In the game the producing group is many
+  machines, each with its own output.
+- **UX:**
+  - The balancer gets an optional **several inputs** toggle. It's off by
+    default, so the balancer works as today.
+  - When it's on, the input is several belts: a count of equal inputs (8 ×
+    250/min), or a list of rates.
+  - **From the planner:** the popup and the link start with one input per
+    machine in the producing group. A fractional count gives one smaller
+    input: 7.5 machines at 100/min are 7 × 100 + 1 × 50.
+  - **With a belt limit selected:** no input, internal belt or output may
+    go over the tier. The toggle can combine machines onto the fewest input
+    belts that fit (2004/min on Mk.6: 2 belts of 1002), and an output over
+    the limit is reported, or split into several output belts.
+  - Links keep working: `in=120` stays one input, and a new form such as
+    `in=8x250` or repeated `in=` adds inputs.
+- **Solver** (`src/solver/`, framework-free):
+  - Generalise `SolveInput` from one input rate to a list of input rates.
+  - Two ways to build it; prototype both and keep what the simulator checks
+    and the user prefers:
+    - *Proportional:* split every input by the outputs' ratios (one
+      balancer per input), then merge per output with merger trees (≤3 per
+      merger). Always exact, and no belt carries more than its input, but it
+      takes many splitters.
+    - *Packing:* send whole inputs straight to an output where they fit, as
+      in a transportation problem, and split only the few inputs that
+      straddle two outputs. Far fewer buildings, and closer to what players
+      build.
+  - Every result is still checked by `simulate()`.
+  - Grouping machines onto belts is the same helper #18 needs. Write it
+    once in `src/planner/`.
+- **Done when:** 2000/min from 20 machines at 100/min, split 1200 / 800 with
+  a Mk.6 limit, gives a balancer that simulates exactly with no belt over
+  1200, and the planner's ⑂ popup opens it with the inputs filled in.
+- **Tests:** solver tests that simulate multi-input graphs (equal inputs, a
+  partial input, a belt limit), and a screenshot of the popup.
+
+### 20. Build cost
+
+**Value:** "what do I need to bring to build this?" The summary already
+counts buildings; this adds the materials they cost. Asked for by the user
+on 2026-10-14. **Effort:** S–M.
+
+- **Data:** available. greeny's `data1.0.json` has a build recipe for every
+  building (`forBuilding: true`, 500 of them), e.g. Constructor = 2
+  Reinforced Iron Plate + 8 Cable. `scripts/import-base.ts` drops them
+  today (`.filter((r) => r.inMachine && !r.forBuilding)`).
+  - Add `Machine.buildCost?: ItemAmount[]` to the pack format, so mods can
+    add or patch it. Update `data-model.md`.
+  - Resource wells: the pressurizer plus a satellite per site.
+  - Fill any gaps in `base-overlay.ts`. A machine with no cost shows as
+    "cost unknown" rather than 0.
+- **UX:**
+  - A "Build cost" section in the summary: total items for the buildings
+    the plan needs, counted whole (`ceil` per group, like the Buildings
+    section), next to the power shards and Somersloops already listed.
+  - **With #21, the checklist drives what's left:** the section shows the
+    total and **still needed**, which leaves out every node marked done.
+    Marking a node done takes its buildings' cost off "still needed" right
+    away, and unmarking puts it back. A done node that now needs more
+    machines (done with 6, now needs 8) still counts the 2 extra.
+  - Maybe later: belts and pipes (their length isn't known), and splitters
+    and mergers counted from the ⑂ / ⑃ badges.
+- **Implementation:** a pure `buildCost(plan, result, catalog)` in
+  `src/planner/`, from `result.totals.machines` or per node.
+- **Done when:** the Modular Frame chain from #2 shows its cost, and the
+  numbers match the wiki for a couple of buildings. Once #21 is in, marking
+  nodes done lowers "still needed" by exactly their cost.
+- **Tests:** importer output for a few machines (Constructor, Miner Mk.3,
+  Nuclear Power Plant), and unit tests for `buildCost`.
+
+### 21. Build checklist
+
+**Value:** keeps track of a plan while building it in the game, often
+across several sessions. Asked for by the user on 2026-10-14. **Effort:** S.
+
+- **What it is** (agreed with the user, 2026-10-14): a visual aid, one mark
+  per node meaning "I'm done with this node". Nothing more:
+  - Belts and pipes can't be marked.
+  - No partial progress: a node is done or not ("6 of 10 built" is out).
+- **UX:**
+  - A ✓ toggle on the card (a corner badge) and in the inspector. Done cards
+    get a green check and fade a little, so what's left stands out.
+  - The summary shows progress, e.g. "12 of 30 nodes done". With #20, the
+    build cost's "still needed" leaves out done nodes (see #20).
+  - Maybe a "show what's left" view that dims everything done.
+- **Nice to have: a warning when the plan changes.** If a node was marked
+  done with 6 machines and an edit later needs 8, the card warns "done with
+  6, now needs 8". For that, the mark stores the machine count at the time
+  (`done?: { count: number }` on `PlanNodeBase`, optional so saved plans
+  keep loading). The count is only for the warning; there is no way to enter
+  partial progress.
+- **Implementation:**
+  - Not part of solving; `solvePlan` ignores it.
+  - Set it through a helper in `edit.ts`, as one undo step. Duplicated or
+    pasted nodes start not done.
+- **Done when:** marks survive a reload and export/import, the summary shows
+  progress, and a done node that needs more machines after an edit is
+  flagged.
+- **Tests:** edit helper tests (toggle, copy clears it), and a screenshot of
+  done and not-done cards.
+
 ### 10. 1.2 power multiplier
 
 **Status:** blocked. The user will provide the exact rules (game option range
@@ -550,7 +666,8 @@ sizing each generator group by hand. A nice-to-have: per-group 🎯 MW targets
 
 **Value:** low priority, asked for by the user on 2026-10-14. #4 says *how
 many* belts an edge needs ("2000 · 2× Mk.6"); this says *how to build them*.
-**Effort:** S–M. Do it after #4.
+**Effort:** S–M. Do it after #4, in one PR with #19 (the balancer's
+several inputs), which needs the same machines-onto-belts helper.
 
 - **The idea:** an edge joins two machine groups, so it never has to be one
   belt. For an edge carrying 2000/min, suggest a concrete way to carry it:
