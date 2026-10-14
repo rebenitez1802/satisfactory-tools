@@ -19,6 +19,7 @@ export type RecipeId = Id
 export type PurityId = Id
 export type TransportTierId = Id
 export type MapId = Id
+export type SchematicId = Id
 
 /** Physical form. Solids ride belts; liquids and gases go through pipes. */
 export type ItemForm = 'solid' | 'liquid' | 'gas'
@@ -199,6 +200,30 @@ export interface WorldMap {
   sites: WorldSite[]
 }
 
+/**
+ * How a schematic is unlocked, which is all the planner needs to know about
+ * it (game progress, roadmap #24):
+ *   - milestone: with its HUB tier (tier 0 is the HUB upgrades)
+ *   - research: ticked by the player (the MAM in vanilla)
+ *   - alternate: a hard drive, found once every schematic in `requires` is
+ *     unlocked; whether the player has it is a per-recipe lock
+ */
+export type SchematicKind = 'milestone' | 'research' | 'alternate'
+
+/** Something the player unlocks in the game, and the recipes it unlocks. */
+export interface Schematic {
+  id: SchematicId
+  name: string
+  kind: SchematicKind
+  /** Milestones: the HUB tier. */
+  tier: number
+  /** Research: the tree it's in (Caterium, Sulfur…), for grouping. */
+  group?: string
+  recipes: RecipeId[]
+  /** Schematics that must be unlocked first. */
+  requires?: SchematicId[]
+}
+
 /** The merged, ready-to-query result of loading a set of packs. */
 export interface Catalog {
   /** Manifests of the packs merged into this catalog, in load order. */
@@ -210,6 +235,9 @@ export interface Catalog {
   transportTiers: ReadonlyMap<TransportTierId, TransportTier>
   /** World maps; the first is the default. */
   maps: ReadonlyMap<MapId, WorldMap>
+  schematics: ReadonlyMap<SchematicId, Schematic>
+  /** Schematics unlocking each recipe. A recipe with none is always available. */
+  schematicsFor: ReadonlyMap<RecipeId, SchematicId[]>
   /** Recipes listing the item among their outputs. */
   recipesProducing: ReadonlyMap<ItemId, RecipeId[]>
   /** Recipes listing the item among their inputs. */

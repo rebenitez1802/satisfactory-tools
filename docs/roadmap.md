@@ -38,8 +38,8 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | 20 | [Build cost](#20-build-cost) | M2 | Med–High | S–M | Done (PR #12) |
 | 21 | [Build checklist](#21-build-checklist) | M2 | High | S | Done (PR #12) |
 | 22 | [Resources to avoid](#22-resources-to-avoid) | M2 | High | S | Done (PR #19) |
-| 23 | [Lock standard recipes](#23-lock-standard-recipes) | M2 | Medium | XS–S | Planned |
-| 24 | [Game progress](#24-game-progress) | M2 | High | M | Planned, after #23 |
+| 23 | [Lock standard recipes](#23-lock-standard-recipes) | M2 | Medium | XS–S | Done (PR #20) |
+| 24 | [Game progress](#24-game-progress) | M2 | High | M | Done (PR #20) |
 | 25 | [Byproduct makers shared between stages](#25-byproduct-makers-shared-between-stages) | M3 | Medium | M | Later |
 | — | [Mods and data tooling](#deferred-mods-and-data-tooling) | — | — | — | Deferred |
 
@@ -63,7 +63,7 @@ and useful straight away while playing. Reorder freely.
 | 4 | Byproduct loops | #16 | Done (PR #15), without the LP: loops are solved with the spare-byproduct rule. Isolated because it changes rates. |
 | 5 | Optimize | #6, #11 | Done (PR #17), after a solver fix it needed (PR #16: byproducts feeding their maker's own goal). |
 | 6a | Resources to avoid | #22 | Done (PR #19). From the user's testing of #6 (2026-10-14): "build this without oil". Split from 6b on 2026-10-14: it covers the oil case alone and touches Optimize and Build chain, not prefs. |
-| 6b | Game progress | #23, #24 | Plan early in the game with only what's unlocked. Together because both reshape the Recipes dialog and prefs (one migration, `lockedAlternates` → `lockedRecipes` plus progress); #23 alone is mostly groundwork for #24. |
+| 6b | Game progress | #23, #24 | Done (PR #20). Plan early in the game with only what's unlocked. Together because both reshape the Recipes dialog and prefs (one migration, `lockedAlternates` → `lockedRecipes` plus progress); #23 alone is mostly groundwork for #24. |
 | 7 | Real belts | #19, #18 | Both turn one logical flow into belts you can build, and share a helper that puts machines onto belts. Builds on #4's belt counts. |
 | 8 | Use leftovers | #17 | Builds on #2 (adding nodes) and #6 (ranking suggestions). |
 | any time | Small standalones | #9, #15, #14 | Independent; slot one in between the big ones. |
@@ -607,6 +607,9 @@ Oil to 0 in World nodes (meant to describe the map, not a wish).
 
 ### 23. Lock standard recipes
 
+**Done.** Its behaviour is in [production-planner.md](production-planner.md)
+("Recipes"). The original notes:
+
 **Value:** turn off any recipe, not just alternates: "I don't want this
 one", and the building block for #24. **Effort:** XS–S.
 
@@ -620,6 +623,13 @@ one", and the building block for #24. **Effort:** XS–S.
   supply node; check that ordering with locked standard recipes.
 
 ### 24. Game progress
+
+**Done.** Its behaviour is in [production-planner.md](production-planner.md)
+("Recipes") and [data-model.md](data-model.md) (`Schematic`). As built:
+alternates count once the milestones and research they need are done, and
+the per-recipe locks say which hard drives you haven't found; recipes
+greeny lists under no schematic come with their building. Machines are
+still all shown. The original notes:
 
 **Value:** plan early in the game: ⚡ Build chain and ✨ Optimize only use what
 you've unlocked. **Effort:** M.

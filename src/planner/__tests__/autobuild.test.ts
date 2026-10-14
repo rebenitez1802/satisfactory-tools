@@ -74,6 +74,11 @@ describe('chooseProducer', () => {
     expect(pick('Desc_PolymerResin_C')).toBe('Polymer Resin')
     expect(pick('Desc_PolymerResin_C', { isRecipeHidden: () => true })).toBe('supply')
     expect(pick('Desc_Leaves_C')).toBe('supply')
+    // A locked standard recipe falls back the same way.
+    const plate = pick('Desc_IronPlate_C', { isRecipeHidden: (id: string) => id === b('Recipe_IronPlate_C') })
+    expect(catalog.recipes.get(b('Recipe_IronPlate_C'))!.name).toBe('Iron Plate')
+    expect([...catalog.recipes.values()].find((r) => r.name === plate)?.alternate).toBe(true)
+    expect(pick('Desc_IronPlate_C', { isRecipeHidden: (id: string) => (catalog.recipesProducing.get(b('Desc_IronPlate_C')) ?? []).includes(id) })).toBe('supply')
   })
 
   it('skips recipes that eat an item already being built', () => {

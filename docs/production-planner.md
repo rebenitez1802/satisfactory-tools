@@ -291,8 +291,8 @@ byproducts (a recipe's second output, or all of a generator's outputs).
     recipe whose **main** product is the item; the simplest unlocked
     alternate; otherwise a supply node (leaves, mycelia, alien remains, …).
     "Simplest" counts recipe steps down to raw resources, so Fuel comes from
-    crude oil, not from unpackaging or residue. Locked alternates are never
-    used.
+    crude oil, not from unpackaging or residue. Recipes that aren't usable
+    (see Recipes) are never used.
   - **Don't use** (below): an avoided resource is never mined anew; it ends
     at a supply node, so it shows as brought in. Recipes whose whole chain
     can do without the avoided resources go first, in the order above
@@ -368,8 +368,9 @@ byproducts (a recipe's second output, or all of a generator's outputs).
     objectives count (and the tie-breaker below counts their buildings).
     Power and buildings are counted at 100% clock. A second, tiny term breaks
     ties (buildings, or resources), so no pointless loops make it in.
-  - It uses the standard recipes and the unlocked alternates, never locked
-    ones. Raw resources are mined, never made: the Converter's ore recipes
+  - It uses only usable recipes (see Recipes). An item no usable recipe
+    makes comes from a supply node, and the dialog says so ("No recipe you
+    can use makes Plastic, so it comes from a supply node"). Raw resources are mined, never made: the Converter's ore recipes
     and unpackaging water or oil are left out, so a ⛔ limit on iron ore
     holds. Items nothing makes and nothing mines (leaves, mycelia, …) come
     from new supply nodes, only when there's no other way.
@@ -436,10 +437,27 @@ byproducts (a recipe's second output, or all of a generator's outputs).
   (`PlanSettings.avoid`). ✨ Optimize and ⚡ Build chain both follow it (see
   above); the solver doesn't, so a plan built by hand can still use them.
   It's per plan, not a preference, since it's about this factory.
-- **Preferences** apply to every plan: unlocked alternates, belt line style
-  (angled, straight or curved), whether ⚡ Build chain reuses nodes, the
-  recipe last picked per item, whether the recipe picker compares at the
-  node's rate, and what ✨ Optimize minimizes.
+- **Recipes** (Settings → Recipes, a preference): which recipes the planner
+  may use. Pickers, the recipe dropdown, ⚡ Build chain and ✨ Optimize only
+  offer usable ones; a plan keeps the recipes it already has. The rules
+  (`recipeAccess` in `src/planner/progress.ts`):
+  - **Game progress** (optional; "Everything unlocked" by default): the HUB
+    tier reached and the MAM research done. A recipe is unlocked when any
+    schematic that unlocks it is: a milestone of that tier or lower
+    ("Up to Tier 4" is Tiers 0–4), ticked research, or an alternate whose
+    required milestones and research are all done (its hard drive can be
+    found). Plastic needs Tier 5 (Oil Processing); Pure Iron Ingot too;
+    Nitro Rocket Fuel needs the Rocket Fuel research.
+  - **Locks by hand**, on top, for any recipe, standard or alternate (an
+    alternate you haven't found, a recipe you don't want). A recipe progress
+    hasn't unlocked yet shows what it needs instead ("Tier 5 (Oil
+    Processing)", "Research: Quartz").
+  - The dialog lists every recipe with a Standard / Alternate filter and a
+    search; *All on* / *All off* apply to what's shown.
+- **Preferences** apply to every plan: usable recipes and game progress,
+  belt line style (angled, straight or curved), whether ⚡ Build chain
+  reuses nodes, the recipe last picked per item, whether the recipe picker
+  compares at the node's rate, and what ✨ Optimize minimizes.
 
 ## Build steps
 
@@ -457,7 +475,7 @@ All eight steps are done for v1; see the polish backlog for what's next.
 6. Plan summary panel.
 7. Saving: autosave to localStorage, multiple plans, JSON export/import,
    undo/redo.
-8. Plan settings: allowed alternates, belt/pipe tier, default machine mode.
+8. Plan settings: usable recipes and game progress, belt/pipe tier, default machine mode.
 
 ## Follow-ups
 

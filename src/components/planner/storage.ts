@@ -1,4 +1,4 @@
-import type { Objective, Plan } from '../../planner'
+import type { GameProgress, Objective, Plan } from '../../planner'
 
 // Plans and preferences live in localStorage. Each plan is stored whole, keyed
 // by a local id; the active one is restored on the next visit.
@@ -22,8 +22,10 @@ export interface PlanStore {
 export type EdgeStyle = 'step' | 'straight' | 'curved'
 
 export interface Prefs {
-  /** Alternate recipes the player hasn't unlocked; hidden from pickers. */
-  lockedAlternates: string[]
+  /** Recipes turned off by hand (alternates not found yet, or any recipe not wanted); hidden from pickers. */
+  lockedRecipes: string[]
+  /** How far the player is in the game. Absent: everything is unlocked. */
+  progress?: GameProgress
   /** How belts are drawn: right-angled (like the balancer), straight, or curved. */
   edgeStyle: EdgeStyle
   /** Recipe the player last picked per item; ⚡ Build chain uses it first. */
@@ -70,7 +72,24 @@ export function saveStore(store: PlanStore) {
 }
 
 export function loadPrefs(): Prefs {
-  return { lockedAlternates: [], edgeStyle: 'step', preferredRecipes: {}, buildReuse: true, compareAtRate: true, optimizeFor: 'resources', ...read<Prefs>(PREFS_KEY) }
+  return parsePrefs(read<unknown>(PREFS_KEY))
+}
+
+/** Stored prefs merged over the defaults. Before game progress, locks were alternates only (`lockedAlternates`). */
+export function parsePrefs(stored: unknown): Prefs {
+  const { lockedAlternates, ...rest } = (stored && typeof stored === 'object' ? stored : {}) as Partial<Prefs> & { lockedAlternates?: string[] }
+  const prefs: Prefs = {
+    lockedRecipes: lockedAlternates ?? [],
+    edgeStyle: 'step',
+    preferredRecipes: {},
+    buildReuse: true,
+    compareAtRate: true,
+    optimizeFor: 'resources',
+    ...rest,
+  }
+  const p = prefs.progress
+  if (p !== undefined && (typeof p !== 'object' || typeof p.tier !== 'number' || !Array.isArray(p.research))) delete prefs.progress
+  return prefs
 }
 
 export function savePrefs(prefs: Prefs) {

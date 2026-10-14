@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import type { Catalog, ItemId } from '../../catalog'
-import { builtCount, duplicateNodes, worldSites, markDone, missingInputs, newNodeId, removeNodes, setRecipe, solvePlan, updateNode, validatePlan } from '../../planner'
+import { builtCount, duplicateNodes, worldSites, markDone, missingInputs, newNodeId, recipeAccess, removeNodes, setRecipe, solvePlan, updateNode, validatePlan } from '../../planner'
 import type { Plan, PlanEdge, PlanNode, PlanSettings } from '../../planner'
-import { AlternatesModal } from './AlternatesModal'
 import { BalancerPopup } from './BalancerPopup'
 import { OptimizeModal } from './OptimizeModal'
+import { RecipesModal } from './RecipesModal'
 import { WorldModal } from './WorldModal'
 import { CatalogProvider, useCatalog, useCatalogState } from './catalogContext'
 import { Inspector, type InspectorActions } from './Inspector'
@@ -82,13 +82,14 @@ function Planner() {
 
   const [selection, setSelection] = useState<{ nodes: string[]; edges: string[] }>({ nodes: [], edges: [] })
   const [openSplit, setOpenSplit] = useState<{ nodeId: string; item: ItemId } | null>(null)
-  const [showAlternates, setShowAlternates] = useState(false)
+  const [showRecipes, setShowRecipes] = useState(false)
   const [showOptimize, setShowOptimize] = useState(false)
   const [showWorld, setShowWorld] = useState(false)
   const [fileError, setFileError] = useState<string>()
   const [prefs, setPrefs] = useState(loadPrefs)
-  const locked = useMemo(() => new Set(prefs.lockedAlternates), [prefs])
-  const isRecipeHidden = useCallback((id: string) => locked.has(id), [locked])
+  const locked = useMemo(() => new Set(prefs.lockedRecipes), [prefs.lockedRecipes])
+  const access = useMemo(() => recipeAccess(catalog, prefs.progress, locked), [catalog, prefs.progress, locked])
+  const isRecipeHidden = useCallback((id: string) => access(id).state !== 'ok', [access])
   useEffect(() => savePrefs(prefs), [prefs])
   const updatePrefs = useCallback((patch: Partial<Prefs>) => setPrefs((p) => ({ ...p, ...patch })), [])
   const rememberRecipe = useCallback(
@@ -287,8 +288,8 @@ function Planner() {
     [catalog, result, plan.settings, update, mark, isRecipeHidden, prefs.edgeStyle, build, rememberRecipe],
   )
   const split = openSplit && result.splits.find((s) => s.node === openSplit.nodeId && s.item === openSplit.item)
-  const alternateCount = [...catalog.recipes.values()].filter((r) => r.alternate).length
-  const alternates = `${alternateCount - [...locked].filter((id) => catalog.recipes.has(id)).length} of ${alternateCount} unlocked`
+  const usable = [...catalog.recipes.keys()].filter((id) => !isRecipeHidden(id)).length
+  const recipesLabel = `${prefs.progress ? `Tier ${prefs.progress.tier}` : 'Everything'} · ${usable} of ${catalog.recipes.size} usable`
   const liveSelection = {
     nodes: selection.nodes.filter((id) => plan.nodes.some((n) => n.id === id)),
     edges: selection.edges.filter((id) => plan.edges.some((e) => e.id === id)),
@@ -324,8 +325,8 @@ function Planner() {
             result={result}
             catalog={catalog}
             updateSettings={updateSettings}
-            alternates={alternates}
-            onEditAlternates={() => setShowAlternates(true)}
+            recipes={recipesLabel}
+            onEditRecipes={() => setShowRecipes(true)}
             edgeStyle={prefs.edgeStyle}
             onEdgeStyle={(edgeStyle) => updatePrefs({ edgeStyle })}
             buildReuse={prefs.buildReuse}
@@ -375,7 +376,7 @@ function Planner() {
           result={result}
           catalog={catalog}
           isRecipeHidden={isRecipeHidden}
-          alternates={alternates}
+          recipes={recipesLabel}
           objective={prefs.optimizeFor}
           onObjective={(optimizeFor) => updatePrefs({ optimizeFor })}
           onAvoid={setAvoid}
@@ -400,12 +401,15 @@ function Planner() {
           onClose={() => setShowWorld(false)}
         />
       )}
-      {showAlternates && (
-        <AlternatesModal
+      {showRecipes && (
+        <RecipesModal
           catalog={catalog}
           locked={locked}
-          onChange={(next) => updatePrefs({ lockedAlternates: [...next] })}
-          onClose={() => setShowAlternates(false)}
+          progress={prefs.progress}
+          access={access}
+          onLocked={(next) => updatePrefs({ lockedRecipes: [...next] })}
+          onProgress={(progress) => setPrefs(({ progress: _, ...p }) => (progress ? { ...p, progress } : p))}
+          onClose={() => setShowRecipes(false)}
         />
       )}
     </PlannerContext.Provider>

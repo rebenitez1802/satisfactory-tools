@@ -43,7 +43,8 @@ chain fills a goal or missing input back to raw resources. ✨ Optimize picks
 the best recipes for the plan's goals with a linear program, weighing raw
 resources by how many nodes the map has, and previews the change. A plan
 can list resources not to use ("build this without oil"), which ✨ Optimize
-and ⚡ Build chain both follow. Splits
+and ⚡ Build chain both follow. Game progress (HUB tier and MAM research) and
+per-recipe locks decide which recipes are offered at all. Splits
 open a read-only load balancer. A build checklist (✓ on each card) and the
 build cost help while building the plan in the game. Plans live in tabs and autosave to
 localStorage. Game data comes from **mod-ready data packs** (see "Production
@@ -134,10 +135,11 @@ src/
                             (targets & limits, byproduct stages), create/edit/place helpers,
                             layout.ts (Tidy, dagre), autobuild.ts (⚡ Build chain),
                             buildcost.ts (build checklist, build cost), optimize.ts (✨ Optimize)
-                            on lp.ts (simplex), world.ts (world node counts and caps)
+                            on lp.ts (simplex), world.ts (world node counts and caps),
+                            progress.ts (game progress, which recipes are usable)
   components/planner/       Planner UI: PlannerTool (state, tabs, history), PlanCanvas (React Flow),
                             nodes.tsx (cards), Inspector, Picker, RecipeSelect, BalancerPopup,
-                            OptimizeModal, WorldModal, planner.css
+                            OptimizeModal, WorldModal, RecipesModal, AvoidChips, planner.css
   components/
     LoadBalancerTool.tsx    Left panel UI (input, outputs, belt tier, toggles) → calls solve()
     GraphView.tsx           React Flow canvas: custom node/edge types, handle

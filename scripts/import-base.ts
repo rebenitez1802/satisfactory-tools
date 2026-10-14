@@ -3,13 +3,15 @@
 // equipment and FICSMAS (a separate file upstream) are left out, and the
 // build-gun recipes of the machines we keep become their `buildCost`. Fluid amounts are already in m³. Generators become machines with
 // one recipe per fuel, so the planner sizes fuel chains like any other.
+// Milestones, MAM research and alternates' hard drives become schematics
+// (what unlocks each recipe), for game progress.
 //
 //   node scripts/import-base.ts      (then scripts/fetch-icons.ts adds icons)
 
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DataPack } from '../src/catalog/pack.ts'
-import type { Item, Machine, Recipe } from '../src/catalog/types.ts'
+import type { Item, Machine, Recipe, Schematic, SchematicKind } from '../src/catalog/types.ts'
 import {
   EXTRACTORS,
   FUEL_WASTE,
@@ -19,6 +21,7 @@ import {
   OVERCLOCK,
   PRODUCTION,
   PURITIES,
+  RESEARCH_TREES,
   SUPPORT_MACHINES,
   TRANSPORT_TIERS,
   UPGRADE_ITEMS,
@@ -155,6 +158,64 @@ recipes.sort(byId)
 machines.sort(byId)
 for (const m of machines) if (!m.buildCost) console.warn(`No build cost for ${m.id}`)
 
+// Schematics: what unlocks each recipe. Milestones and HUB upgrades (tier 0)
+// unlock with their tier, MAM research is ticked by the player, and
+// alternates are hard drives. AWESOME Sink and customization schematics
+// unlock no machine recipes and are left out.
+const KINDS: Record<string, SchematicKind> = { EST_Tutorial: 'milestone', EST_Milestone: 'milestone', EST_MAM: 'research', EST_Alternate: 'alternate' }
+const ours = new Set(recipes.map((r) => r.id))
+const sources = Object.values(data.schematics).filter((s) => KINDS[s.type])
+const unlocks = new Map(sources.map((s) => [s.className, s.unlock.recipes.filter((r) => ours.has(r))]))
+// Recipes no schematic lists (unpackaging, residue recipes, the Converter's,
+// the generators' fuels, the first iron recipes) come with the building that
+// runs them.
+const listed = new Set([...unlocks.values()].flat())
+const buildRecipe = new Map(
+  Object.values(data.recipes)
+    .filter((r) => r.forBuilding && r.products.length === 1)
+    .map((r) => [toBuild(r.products[0].item), r.className]),
+)
+for (const r of recipes) {
+  if (listed.has(r.id)) continue
+  const build = buildRecipe.get(r.machines[0])
+  const by = sources.filter((s) => build && s.unlock.recipes.includes(build))
+  if (!by.length) throw new Error(`Nothing unlocks ${r.id} or its machine ${r.machines[0]}`)
+  for (const s of by) unlocks.get(s.className)!.push(r.id)
+}
+// Kept: every milestone (so each tier is listed, even one that unlocks only
+// buildings), schematics that unlock a recipe, and those they require.
+const keep = new Set(sources.filter((s) => KINDS[s.type] === 'milestone' || unlocks.get(s.className)!.length).map((s) => s.className))
+for (let changed = true; changed; ) {
+  changed = false
+  for (const s of sources) {
+    if (!keep.has(s.className)) continue
+    for (const req of s.requiredSchematics) {
+      if (!keep.has(req) && unlocks.has(req)) {
+        keep.add(req)
+        changed = true
+      }
+    }
+  }
+}
+const schematics: Schematic[] = sources
+  .filter((s) => keep.has(s.className))
+  .map((s): Schematic => {
+    const kind = KINDS[s.type]
+    const requires = s.requiredSchematics.filter((r) => keep.has(r))
+    const tree = s.className.match(/^Research_([A-Za-z]+)/)?.[1]
+    if (kind === 'research' && !RESEARCH_TREES[tree ?? '']) throw new Error(`Overlay is missing research tree ${tree} (${s.className})`)
+    return {
+      id: s.className,
+      name: s.name.replace(/^Alternate:\s*/, ''),
+      kind,
+      tier: kind === 'milestone' ? s.tier : 0,
+      ...(kind === 'research' ? { group: RESEARCH_TREES[tree!] } : {}),
+      recipes: unlocks.get(s.className)!.sort(),
+      ...(requires.length ? { requires } : {}),
+    }
+  })
+  .sort(byId)
+
 // Items referenced by recipes or extractable.
 const usedItems = new Set([
   ...recipes.flatMap((r) => [...r.inputs, ...r.outputs].map((a) => a.item)),
@@ -198,6 +259,7 @@ const pack: DataPack = {
     machines,
     recipes,
     maps: [WORLD],
+    schematics,
   },
 }
 
@@ -205,5 +267,5 @@ mkdirSync(PACK_DIR, { recursive: true })
 writeFileSync(join(PACK_DIR, 'pack.json'), JSON.stringify(pack, null, 1) + '\n')
 console.log(
   `base pack: ${items.length} items, ${machines.length} machines, ${recipes.length} recipes ` +
-    `(${recipes.filter((r) => r.alternate).length} alternate)`,
+    `(${recipes.filter((r) => r.alternate).length} alternate), ${schematics.length} schematics`,
 )

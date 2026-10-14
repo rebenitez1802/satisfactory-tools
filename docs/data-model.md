@@ -43,6 +43,15 @@ scripts/                           build-time importers (not shipped)
      own counts (`PlanSettings.world`). The base pack's default map comes
      from the wiki's per-resource pages, in `scripts/base-overlay.ts`.
 
+   - `Schematic`: something the player unlocks, and the recipes it unlocks.
+     Its `kind` is all the planner needs: a `milestone` unlocks with its
+     HUB `tier` (tier 0 is the HUB upgrades), `research` is ticked by the
+     player (the MAM, grouped by tree), and an `alternate` is a hard drive,
+     found once every schematic in `requires` is unlocked. A recipe no
+     schematic unlocks is always available. `catalog.schematicsFor` indexes
+     them by recipe. A recipe or requirement that isn't loaded (a mod
+     removed it) is silently forgotten.
+
    `buildCatalog(packs, { enabled })` merges packs into an immutable `Catalog`
    with lookup indexes (`recipesProducing`, `recipesConsuming`,
    `extractorsFor`) plus a list of diagnostics.
@@ -108,5 +117,11 @@ npm run data:base   # scripts/import-base.ts + scripts/fetch-icons.ts
   resource wells, gas forms, generator ports, the waste each nuclear fuel
   rod leaves (greeny lists generators' fuels and water but not their waste),
   and the default map's resource node counts.
+- Schematics are greeny's milestones, HUB upgrades, MAM research and
+  alternates (AWESOME Sink and customization ones are left out). Recipes
+  greeny lists under no schematic (unpackaging, residue recipes, the
+  Converter's, generator fuels, the first iron recipes) come with the
+  schematic that unlocks the building that runs them. MAM tree names are in
+  the overlay. Every milestone is kept, so each tier is listed.
 - Icons and resource node counts come from satisfactory.wiki.gg. Icons are
   © Coffee Stain Studios; both are credited in the site footer.

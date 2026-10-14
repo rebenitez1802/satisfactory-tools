@@ -46,6 +46,18 @@ export interface GreenyData {
       maxPower: number
     }
   >
+  schematics: Record<
+    string,
+    {
+      className: string
+      /** EST_Milestone, EST_Tutorial (HUB upgrades), EST_MAM, EST_Alternate, EST_ResourceSink, EST_Customization… */
+      type: string
+      name: string
+      tier: number
+      unlock: { recipes: string[] }
+      requiredSchematics: string[]
+    }
+  >
   buildings: Record<
     string,
     {

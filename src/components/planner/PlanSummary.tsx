@@ -13,8 +13,8 @@ export function PlanSummary({
   result,
   catalog,
   updateSettings,
-  alternates,
-  onEditAlternates,
+  recipes,
+  onEditRecipes,
   edgeStyle,
   onEdgeStyle,
   buildReuse,
@@ -27,9 +27,9 @@ export function PlanSummary({
   result: SolveResult
   catalog: Catalog
   updateSettings: (patch: Partial<PlanSettings>) => void
-  /** e.g. "111 of 111 unlocked" */
-  alternates: string
-  onEditAlternates: () => void
+  /** e.g. "Tier 5 · 180 of 293 usable" */
+  recipes: string
+  onEditRecipes: () => void
   edgeStyle: EdgeStyle
   onEdgeStyle: (style: EdgeStyle) => void
   buildReuse: boolean
@@ -259,9 +259,9 @@ export function PlanSummary({
           </button>
         </div>
         <div className="field">
-          <span>Alternate recipes</span>
-          <button type="button" className="pn-button pn-button-quiet pn-button-inline" onClick={onEditAlternates}>
-            {alternates} · choose…
+          <span>Recipes</span>
+          <button type="button" className="pn-button pn-button-quiet pn-button-inline" onClick={onEditRecipes}>
+            {recipes} · choose…
           </button>
         </div>
       </Section>

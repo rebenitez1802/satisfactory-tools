@@ -12,7 +12,7 @@ export interface PlannerContextValue {
   /** Build checklist: mark nodes done with the machines they need now, or clear the mark. */
   markDone: (ids: string[], done: boolean) => void
   openSplit: (nodeId: string, item: ItemId) => void
-  /** Locked alternates are left out of pickers. */
+  /** Recipes not unlocked yet, or locked by hand, are left out of pickers. */
   isRecipeHidden: (id: string) => boolean
   edgeStyle: EdgeStyle
   /** Options for ⚡ Build chain: remembered recipes and whether to reuse nodes. */
