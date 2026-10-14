@@ -7,8 +7,10 @@
 // minimizes the artificial variables to find a feasible basis; phase 2
 // minimizes the real objective from there.
 //
-// - Rows are scaled to a largest coefficient of 1, since recipe rates and
-//   resource weights span several orders of magnitude.
+// - Rows, and the objective, are scaled to a largest coefficient of 1, since
+//   recipe rates, weights and MW span several orders of magnitude. A column
+//   that could grow forever but improves the objective only by rounding
+//   noise is a flat direction, not an unbounded one: it's set aside.
 // - The planner's item rows ("made ≥ used") all have a right-hand side of 0,
 //   which makes the program badly degenerate: the simplex can pivot for
 //   thousands of steps without moving. Each inequality is relaxed by a tiny,
@@ -45,6 +47,8 @@ export type LpResult =
 
 const TOL = 1e-9
 const PERTURB = 1e-8
+/** Reduced costs this close to 0 are rounding noise (the objective is scaled to a largest cost of 1). */
+const FLAT = 1e-7
 const MAX_PIVOTS = 50_000
 const DEGENERATE_RUN = 50
 
@@ -119,13 +123,17 @@ export function solveLp(problem: LpProblem): LpResult {
   /** Simplex iterations; `allowed` limits which columns may enter. */
   const run = (d: Float64Array, allowed: (j: number) => boolean): 'optimal' | 'unbounded' => {
     let degenerate = 0
+    // Columns that could grow forever but improve the objective only by
+    // rounding noise: a flat direction, not an unbounded one.
+    const flat = new Set<number>()
+    const ok = (j: number) => allowed(j) && !flat.has(j)
     for (let iter = 0; iter < MAX_PIVOTS; iter++) {
       let enter = -1
       if (degenerate < DEGENERATE_RUN) {
         let best = -TOL
-        for (let j = 0; j < width; j++) if (d[j] < best && allowed(j)) (best = d[j]), (enter = j)
+        for (let j = 0; j < width; j++) if (d[j] < best && ok(j)) (best = d[j]), (enter = j)
       } else {
-        for (let j = 0; j < width; j++) if (d[j] < -TOL && allowed(j)) { enter = j; break }
+        for (let j = 0; j < width; j++) if (d[j] < -TOL && ok(j)) { enter = j; break }
       }
       if (enter < 0) return 'optimal'
       let leave = -1
@@ -136,7 +144,13 @@ export function solveLp(problem: LpProblem): LpResult {
         const q = t[i][width] / a
         if (q < ratio - TOL || (q <= ratio + TOL && leave >= 0 && a > t[leave][enter])) (ratio = q), (leave = i)
       }
-      if (leave < 0) return 'unbounded'
+      if (leave < 0) {
+        if (d[enter] > -FLAT) {
+          flat.add(enter)
+          continue
+        }
+        return 'unbounded'
+      }
       degenerate = ratio <= TOL ? degenerate + 1 : 0
       pivot(leave, enter)
       const f = d[enter]
@@ -162,8 +176,10 @@ export function solveLp(problem: LpProblem): LpResult {
     }
   }
 
-  // Phase 2: the real objective, artificials kept out.
-  const cost = (j: number) => (j < n ? problem.objective[j] ?? 0 : 0)
+  // Phase 2: the real objective, scaled to a largest cost of 1, artificials kept out.
+  const cmax = Math.max(0, ...problem.objective.map((c) => Math.abs(c ?? 0)))
+  const cscale = cmax > 0 ? 1 / cmax : 1
+  const cost = (j: number) => (j < n ? (problem.objective[j] ?? 0) * cscale : 0)
   const d = reduced(cost)
   if (run(d, (j) => j < firstArt) === 'unbounded') return { status: 'unbounded' }
   // Undo the relaxation: the same basis with the exact right-hand sides. The
@@ -176,5 +192,5 @@ export function solveLp(problem: LpProblem): LpResult {
     for (let k = 0; k < m; k++) v += t[i][start[k]] * rows[k].exact
     x[basis[i]] = v > TOL * big ? v : 0
   }
-  return { status: 'optimal', x, value: x.reduce((s, v, j) => s + v * cost(j), 0) }
+  return { status: 'optimal', x, value: x.reduce((s, v, j) => s + v * (problem.objective[j] ?? 0), 0) }
 }

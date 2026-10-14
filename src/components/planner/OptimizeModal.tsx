@@ -138,7 +138,7 @@ function Comparison({
           const was = before.goals.find((b) => b.id === g.id)?.achieved ?? 0
           const show = g.power ? mw : fmt
           return (
-            <Line key={g.id} icon={item && <Icon of={item} size={20} />} label={g.power ? 'Power made' : (item?.name ?? g.item)} before={show(was)} after={show(g.achieved)} better={g.achieved - was} />
+            <Line key={g.id} icon={item && <Icon of={item} size={20} />} label={g.power ? `Power from ${item?.name ?? 'fuel'}` : (item?.name ?? g.item)} before={show(was)} after={show(g.achieved)} better={g.achieved - was} />
           )
         })}
         <Line label="Power used" before={mw(before.totals.powerMw)} after={mw(after.totals.powerMw)} better={before.totals.powerMw - after.totals.powerMw} />

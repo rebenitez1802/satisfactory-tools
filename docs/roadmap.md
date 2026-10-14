@@ -279,9 +279,15 @@ How it went against the notes below:
 - Building plans from LP flows found a solver bug: a byproduct feeding its
   maker's own goal (alumina's silica to the ingot) was cut into a later
   stage and came out as 0. Fixed separately first (PR #16).
-- Open question for the user: a Max goal behind one ⛔ limit may pull in
-  new, unlimited resources to stretch it (153 Reinforced Iron Plates from
-  120 ore, with oil alternates), whatever the objective.
+- A Max goal behind one ⛔ limit pulls in new, unlimited resources to
+  stretch it, whatever the objective. That's the point of "how much power
+  can I get from one uranium node?" (the user's use case, 2026-10-14), so
+  Max generators are maximized together, in MW: uranium plants plus the
+  plutonium plants burning their waste.
+- Byproduct water is never piped back by the optimizer (water is free).
+- Follow-up (solver): a byproduct maker shared by two stages doesn't hand
+  its later-stage growth to that stage's consumer; the optimizer adds a
+  producer instead. See production-planner.md, Follow-ups.
 
 The original notes:
 

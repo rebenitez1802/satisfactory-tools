@@ -381,16 +381,32 @@ byproducts (a recipe's second output, or all of a generator's outputs).
     is built for that."
   - **Max** goals and Max generators get as much as the limits allow, after
     the targets. Several Max goals each get the same share of what they
-    could reach alone. A Max goal with no ⛔ limit upstream is reported, and
-    nothing is proposed. Since new extractors are flexible, a Max goal may
-    take in new resources to stretch a limited one: 120 iron ore makes 153
-    Reinforced Iron Plates/min with oil-based alternates.
+    could reach alone. Max generators count as one goal, of MW, so plants
+    that burn each other's waste make the most power together. A Max goal
+    with no ⛔ limit upstream is reported, and nothing is proposed.
+  - New extractors are flexible, so a Max goal takes in whatever other
+    resources stretch the limited one the furthest. That answers "how much
+    can I get from this node?": one normal uranium node (Mk.3, 240/min) with
+    a Max Nuclear Power Plant makes 30 GW on standard recipes (12 plants);
+    add a Max plutonium plant and its waste makes 15 GW more (6 plants),
+    without any uranium waste left. With every alternate, 136 GW, and 168 GW
+    with a Ficsonium plant too. Likewise 120 iron ore makes 153 Reinforced
+    Iron Plates/min with oil-based alternates.
+  - Byproduct water isn't piped back: it's free from any Water Extractor,
+    and piping it back closes loops that keep a waste chain from getting its
+    waste. It shows as spare output (pipe it back by hand if you like).
   - Each recipe the program picks becomes one flexible group. When it runs
     a recipe further than its main product's users take, for the byproduct
     (2 Rubber refineries for 10 rubber and 40 heavy oil residue), the extra
     is a second group whose main product stays unconnected, so the solver
     pulls its byproduct. An input fed by several pulled producers gets
     shares equal to the planned flows.
+  - The plan is then checked with the solver. An input a spare byproduct
+    doesn't fully reach gets a belt from a maker of the item with some left
+    over. Whatever is still short gets another group of the recipe whose
+    byproduct feeds it, run for that byproduct (Quartz Purification for its
+    dissolved silica), or else what ⚡ Build chain would add. That can cost
+    a little more than the program planned (see Follow-ups).
   - Fractional machines are fine; the plan's machine mode shows them as
     usual.
 - **World nodes:** the summary lists the resource nodes and well
@@ -435,6 +451,10 @@ Known v1 limits that the roadmap addresses:
 
 - Several Max goals behind one limit split it evenly; there is no per-branch
   share yet (roadmap #7).
+- A byproduct maker shared by two stages (one Heavy Oil Residue refinery
+  serving a uranium and a plutonium chain) grows for the later stage, but
+  only the earlier stage's spare reaches the byproduct's consumer there.
+  ✨ Optimize works around it by adding a producer for the rest.
 - Loops of main products (Recycled Plastic ⇄ Recycled Rubber) are still
   pulled; they settle as long as each round of the loop needs less than it
   makes. A loop that needs more than it makes reports that it never

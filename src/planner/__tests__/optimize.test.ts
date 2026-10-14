@@ -181,6 +181,42 @@ describe('optimize', () => {
     expect(r.solved.goals[0].achieved).toBeCloseTo(500)
   })
 
+  describe('how much power one uranium node makes', () => {
+    // A Miner Mk.3 on a normal node: 240 uranium/min, ⛔ limited.
+    const node = () => extractorNode('u', 'Build_MinerMk3_C', 'Desc_OreUranium_C', [{ purity: 'base:normal', count: 1 }], { limited: true })
+    const plant = (id: string, rod: string) => recipeNode(id, `Recipe_GeneratorNuclear_${rod}_C`, 'Build_GeneratorNuclear_C', { power: 'max' })
+    const mw = (r: ReturnType<typeof run>, id: string) => r.solved.goals.find((g) => g.id === id)!.achieved
+
+    it('uranium plants alone', () => {
+      // 240 uranium → 120 cells → 2.4 rods/min → 12 plants at 0.2 rods each.
+      const r = run(plan([node(), plant('u235', 'NuclearFuelRod')]), { isRecipeHidden: unlocked() })
+      expect(mw(r, 'u235')).toBeCloseTo(30000)
+      expect(r.solved.nodes.get('u235')!.activity).toBeCloseTo(12)
+      // Everything else the rods need comes from new, unlimited extractors.
+      expect(r.raw('Desc_OreUranium_C')).toBeCloseTo(240)
+      expect(r.raw('Desc_Stone_C')).toBeGreaterThan(0)
+    })
+
+    it('plutonium plants burning their waste, for the most power together', () => {
+      // 120 waste/min: a pellet takes 2.5 through Non-Fissile Uranium and
+      // 0.83 more, so 36 pellets → 18 cells → 0.6 rods → 6 plants, 15 GW.
+      const r = run(plan([node(), plant('u235', 'NuclearFuelRod'), plant('pu', 'PlutoniumFuelRod')]), { isRecipeHidden: unlocked() })
+      expect(r.ok).toBe(true)
+      expect(mw(r, 'u235')).toBeCloseTo(30000)
+      expect(mw(r, 'pu')).toBeCloseTo(15000)
+      expect(r.solved.totals.surplus.map((x) => x.item)).not.toContain('base:Desc_NuclearWaste_C')
+      expect(r.solved.totals.missingInputs).toEqual([])
+    })
+
+    it('with every alternate and a Ficsonium plant, nothing is left short', () => {
+      const r = run(plan([node(), plant('u235', 'NuclearFuelRod'), plant('pu', 'PlutoniumFuelRod'), plant('fx', 'FicsoniumFuelRod')]))
+      expect(r.ok).toBe(true)
+      expect(mw(r, 'u235') + mw(r, 'pu') + mw(r, 'fx')).toBeGreaterThan(136000)
+      expect(r.solved.totals.missingInputs).toEqual([])
+      expect(r.solved.diagnostics).toEqual([])
+    })
+  })
+
   it('stays within the map\'s sites', () => {
     // 3 impure + 2 normal uranium nodes give at most 2100/min.
     const r = run(plan([goalNode('g', 'Desc_OreUranium_C', 3000)]))

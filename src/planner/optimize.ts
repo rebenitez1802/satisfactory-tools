@@ -16,8 +16,10 @@
 // - Every item: made ≥ used. Byproducts may be left over.
 // - Limits cap their groups. 🎯 targets are met together, scaled down by one
 //   factor if the limits can't take them all, like the solver does. Max goals
-//   (and Max generators) then get the same share of what each could reach
-//   alone: a first program per Max goal finds that, a second one the share.
+//   then get the same share of what each could reach alone: a first program
+//   per Max goal finds that, a second one the share. Max generators count as
+//   one goal, of MW, so plants that burn each other's waste (uranium, then
+//   plutonium) make as much power as they can together.
 // - Objective: fewest raw resources (each weighed by how scarce the map
 //   makes it, iron = 1; water from Water Extractors is free, since only
 //   their power and buildings cost anything, and the other objectives count
@@ -38,10 +40,12 @@
 //   item, if there is one, to make up whatever the spare doesn't cover.
 
 import type { Catalog, ItemId, Machine, RecipeId, WorldSite } from '../catalog'
-import { bestExtractor, isGenerator } from './autobuild'
+import { bestExtractor, buildUpstream, isGenerator, missingInputs, openInputs, type PortRef } from './autobuild'
+import { connectPorts } from './edit'
 import { createNode, type PickOption } from './create'
 import { solveLp, type LpConstraint, type LpProblem } from './lp'
 import { basePowerMw, extractorRate, generatedMw, machinePowerMw, outputMultiplier } from './rates'
+import { shortfall, solvePlan } from './solve'
 import type { Plan, PlanEdge, PlanNode } from './types'
 import { worldCapacity, worldSites } from './world'
 
@@ -97,6 +101,8 @@ interface Column {
   worldCap?: number
   /** Goals and generators with a power target: a fixed activity, or Max. */
   anchor?: number | 'max'
+  /** Generators: MW per unit of activity. */
+  mw?: number
   cost: Record<Objective, number>
   /** Kept recipe nodes may not be split. */
   recipe?: boolean
@@ -146,6 +152,7 @@ function keptColumn(node: PlanNode, catalog: Catalog, weight: (item: ItemId) => 
         byproducts: new Set((gen ? recipe.outputs : recipe.outputs.slice(1)).map((a) => a.item)),
         cap: node.limited ? node.count * node.clock : undefined,
         anchor: !mwPerUnit || node.power === undefined ? undefined : node.power === 'max' ? 'max' : Math.max(0, node.power) / mwPerUnit,
+        mw: mwPerUnit || undefined,
         cost: { resources: 0, power: basePowerMw(machine, recipe) * amp, buildings: 1 },
         recipe: true,
       }
@@ -245,6 +252,11 @@ export function optimize(plan: Plan, catalog: Catalog, opts: OptimizeOptions): O
     for (const r of recipes) if (r.outputs.some((a) => relevant.has(a.item))) for (const a of r.inputs) changed = need(a.item) || changed
   }
 
+  // Byproduct water isn't piped back: it's free from any Water Extractor,
+  // and piping it back closes loops (Aluminum Scrap's water to the alumina,
+  // Non-Fissile Uranium's to the reactors) that make plans harder to build
+  // and keep a waste chain from getting the waste it's for. It's left over.
+  const free = (item: ItemId) => catalog.extractorsFor.has(item) && worldCapacity(catalog, [], item) === undefined
   const columns: Column[] = [...kept]
   for (const r of recipes) {
     if (!r.outputs.some((a) => relevant.has(a.item))) continue
@@ -253,13 +265,14 @@ export function optimize(plan: Plan, catalog: Catalog, opts: OptimizeOptions): O
     columns.push({
       make: { kind: 'recipe', recipe: r },
       inputs: new Map(r.inputs.map((a) => [a.item, a.amount * perMachine])),
-      outputs: new Map(r.outputs.map((a) => [a.item, a.amount * perMachine])),
+      outputs: new Map(r.outputs.filter((a, i) => i === 0 || !free(a.item)).map((a) => [a.item, a.amount * perMachine])),
       byproducts: new Set(r.outputs.slice(1).map((a) => a.item)),
       cost: { resources: 0, power: basePowerMw(machine, r), buildings: 1 },
     })
   }
   const keptSource = new Set(kept.filter((c) => c.node!.kind === 'extractor' || c.node!.kind === 'supply').flatMap((c) => [...c.outputs.keys()]))
-  const made = new Set(recipes.flatMap((r) => r.outputs.map((a) => a.item)))
+  // Generator waste is made too, by the kept generators: never brought in.
+  const made = new Set([...recipes, ...[...catalog.recipes.values()].filter((r) => isGenerator(catalog, r))].flatMap((r) => r.outputs.map((a) => a.item)))
   for (const item of relevant) {
     if (keptSource.has(item)) continue
     const it = catalog.items.get(item)!
@@ -279,20 +292,36 @@ export function optimize(plan: Plan, catalog: Catalog, opts: OptimizeOptions): O
     }
   }
 
+  const name = (c: Column) => {
+    const n = c.node!
+    if (n.kind === 'goal') return catalog.items.get(n.item)?.name ?? n.item
+    return n.kind === 'recipe' ? (catalog.recipes.get(n.recipe)?.name ?? n.recipe) : n.id
+  }
+
   // The programs. Column j is variable j; `extra` adds one more (the scale or share).
   const items = [...relevant]
   const anchors = columns.map((c, j) => ({ c, j })).filter(({ c }) => c.anchor !== undefined)
   const targets = anchors.filter(({ c }) => c.anchor !== 'max')
+  // Max anchors in groups: each Max goal on its own, and every Max generator
+  // in one, measured in MW, so plants burning each other's waste (uranium,
+  // then plutonium) make as much power as they can together.
   const maxes = anchors.filter(({ c }) => c.anchor === 'max')
+  const power = maxes.filter(({ c }) => c.mw)
+  const groups: { name: string; terms: [number, number][] }[] = [
+    ...maxes.filter(({ c }) => !c.mw).map(({ c, j }) => ({ name: `${name(c)}: a Max goal`, terms: [[j, 1]] as [number, number][] })),
+    ...(power.length
+      ? [{ name: power.length === 1 ? `${name(power[0].c)}: a Max generator` : 'Max power', terms: power.map(({ c, j }): [number, number] => [j, c.mw!]) }]
+      : []),
+  ]
   const extra = columns.length
   const program = (o: {
     objective: number[]
     /** Numeric targets: × this scale, or × the extra variable. */
     scale: number | 'var'
-    /** Max anchors: fixed at least to these values; others 0 unless `free`. */
+    /** Max groups: at least these values; others 0 unless `free`. */
     maxAt?: Map<number, number>
-    free?: Set<number>
-    /** Max anchors ≥ extra × these. */
+    free?: number
+    /** Max groups ≥ extra × these. */
     share?: Map<number, number>
     world: boolean
   }): LpProblem => {
@@ -314,27 +343,27 @@ export function optimize(plan: Plan, catalog: Catalog, opts: OptimizeOptions): O
       if (o.scale === 'var') constraints.push({ terms: [[j, 1], [extra, -a]], op: '=', rhs: 0 })
       else constraints.push({ terms: [[j, 1]], op: '=', rhs: a * o.scale })
     }
-    for (const { j } of maxes) {
-      if (o.free?.has(j)) continue
-      if (o.share?.has(j)) constraints.push({ terms: [[j, 1], [extra, -o.share.get(j)!]], op: '>=', rhs: 0 })
-      else if (o.maxAt?.has(j)) constraints.push({ terms: [[j, 1]], op: '>=', rhs: o.maxAt.get(j)! })
-      else constraints.push({ terms: [[j, 1]], op: '<=', rhs: 0 })
-    }
+    groups.forEach(({ terms }, k) => {
+      if (o.free === k) return
+      if (o.share?.has(k)) constraints.push({ terms: [...terms, [extra, -o.share.get(k)!]], op: '>=', rhs: 0 })
+      else if (o.maxAt?.has(k)) constraints.push({ terms, op: '>=', rhs: o.maxAt.get(k)! })
+      else constraints.push({ terms, op: '<=', rhs: 0 })
+    })
     if (o.scale === 'var') constraints.push({ terms: [[extra, 1]], op: '<=', rhs: 1 })
     if (o.share) constraints.push({ terms: [[extra, 1]], op: '<=', rhs: 1 })
     return { vars: extra + 1, objective: o.objective, constraints }
   }
-  const maximize = (j: number) => Object.assign(new Array<number>(extra + 1).fill(0), { [j]: -1 })
-  const name = (c: Column) => {
-    const n = c.node!
-    if (n.kind === 'goal') return catalog.items.get(n.item)?.name ?? n.item
-    return n.kind === 'recipe' ? (catalog.recipes.get(n.recipe)?.name ?? n.recipe) : n.id
+  const maximize = (terms: [number, number][]) => {
+    const c = new Array<number>(extra + 1).fill(0)
+    for (const [j, w] of terms) c[j] = -w
+    return c
   }
+  const value = (x: number[], terms: [number, number][]) => terms.reduce((sum, [j, w]) => sum + w * x[j], 0)
 
   // 1. How much of the 🎯 targets the limits allow.
   let scale = 1
   if (targets.length) {
-    const r = solveLp(program({ objective: maximize(extra), scale: 'var', world: true }))
+    const r = solveLp(program({ objective: maximize([[extra, 1]]), scale: 'var', world: true }))
     if (r.status !== 'optimal' || r.x[extra] <= EPS) {
       return fail(
         r.status === 'optimal' || r.status === 'infeasible'
@@ -345,26 +374,25 @@ export function optimize(plan: Plan, catalog: Catalog, opts: OptimizeOptions): O
     scale = Math.min(1, r.x[extra]) * (1 - 1e-9)
   }
 
-  // 2. Max goals: what each could reach alone, then the same share of that for all.
+  // 2. Max groups: what each could reach alone, then the same share of that for all.
   const maxAt = new Map<number, number>()
-  if (maxes.length) {
+  if (groups.length) {
     const best = new Map<number, number>()
-    for (const { c, j } of maxes) {
-      const free = new Set([j])
-      const loose = solveLp(program({ objective: maximize(j), scale, free, world: false }))
+    for (const [k, g] of groups.entries()) {
+      const loose = solveLp(program({ objective: maximize(g.terms), scale, free: k, world: false }))
       if (loose.status === 'unbounded') {
-        return fail(`${name(c)}: a Max ${c.node!.kind === 'goal' ? 'goal' : 'generator'} needs a limit upstream. Set a ⛔ limit on a source or machine group, or give it a 🎯 target.`)
+        return fail(`${g.name} needs a limit upstream. Set a ⛔ limit on a source or machine group, or give it a 🎯 target.`)
       }
-      const r = solveLp(program({ objective: maximize(j), scale, free, world: true }))
-      best.set(j, r.status === 'optimal' ? r.x[j] : 0)
+      const r = solveLp(program({ objective: maximize(g.terms), scale, free: k, world: true }))
+      best.set(k, r.status === 'optimal' ? value(r.x, g.terms) : 0)
     }
     let share = 1
-    if (maxes.length > 1) {
+    if (groups.length > 1) {
       const weights = new Map([...best].filter(([, v]) => v > EPS))
-      const r = solveLp(program({ objective: maximize(extra), scale, share: weights, world: true }))
+      const r = solveLp(program({ objective: maximize([[extra, 1]]), scale, share: weights, world: true }))
       share = r.status === 'optimal' ? Math.min(1, r.x[extra]) : 0
     }
-    for (const [j, v] of best) maxAt.set(j, v * share * (1 - 1e-9))
+    for (const [k, v] of best) maxAt.set(k, v * share * (1 - 1e-9))
     if (!targets.length && [...maxAt.values()].every((v) => v <= EPS)) {
       return fail('The limits (and the map) leave nothing for the Max goals. Raise a limit, or remove it.')
     }
@@ -376,6 +404,34 @@ export function optimize(plan: Plan, catalog: Catalog, opts: OptimizeOptions): O
   const final = solveLp(program({ objective: [...cost, 0], scale, maxAt, world: true }))
   if (final.status !== 'optimal') return fail('The program could not be solved.')
   const built = buildPlan(plan, catalog, columns, final.x.slice(0, extra), gone, opts.newId)
+  // What the solver still can't get to an input (see topUpSpares) gets its
+  // own producer: another group of the recipe whose byproduct feeds it, run
+  // for that byproduct (its main product left unconnected, so it's pulled),
+  // or else what ⚡ Build chain would add. Either one's inputs are built too.
+  let p = topUpSpares(built.plan, catalog)
+  const fallback: PortRef[] = []
+  const extraGroups: string[] = []
+  for (const port of missingInputs(p, catalog, solvePlan(p, catalog))) {
+    const maker = p.edges
+      .filter((e) => e.target === port.node && e.item === port.item)
+      .map((e) => p.nodes.find((n) => n.id === e.source)!)
+      .find((n) => n.kind === 'recipe' && catalog.recipes.get(n.recipe)?.outputs.slice(1).some((a) => a.item === port.item))
+    if (!port.topUp || maker?.kind !== 'recipe') {
+      fallback.push(port)
+      continue
+    }
+    const recipe = catalog.recipes.get(maker.recipe)!
+    const id = opts.newId()
+    const node = createNode({ kind: 'recipe', recipe }, id, maker.position, 'producer', catalog)
+    p = connectPorts({ ...p, nodes: [...p.nodes, node] }, catalog, id, port.item, 'out', port.node)
+    extraGroups.push(id)
+  }
+  const topped = buildUpstream(p, catalog, [...fallback, ...openInputs(p, catalog).filter((x) => extraGroups.includes(x.node))], {
+    newId: opts.newId,
+    isRecipeHidden: opts.isRecipeHidden,
+  })
+  built.plan = topped.plan
+  built.added.push(...extraGroups, ...topped.added)
   return {
     ok: true,
     scale: targets.length ? Math.min(1, scale / (1 - 1e-9)) : 1,
@@ -384,6 +440,39 @@ export function optimize(plan: Plan, catalog: Catalog, opts: OptimizeOptions): O
     added: built.added,
     removed,
   }
+}
+
+/**
+ * When several makers hand out a spare byproduct, the solver gives it out in
+ * its own order, so an input can come up short while another maker's spare
+ * goes unused. Connect each short input to a maker with some left over, and
+ * check again, until nothing is short (or nothing more helps).
+ */
+function topUpSpares(plan: Plan, catalog: Catalog): Plan {
+  let p = plan
+  for (let round = 0; round < 10; round++) {
+    const result = solvePlan(p, catalog)
+    const left = new Map<ItemId, { node: string; amount: number }[]>()
+    for (const res of result.nodes.values()) {
+      for (const port of res.outputs) {
+        const amount = port.produced - port.used
+        if (amount > EPS * Math.max(1, port.produced)) left.set(port.item, [...(left.get(port.item) ?? []), { node: res.id, amount }])
+      }
+    }
+    const edges: PlanEdge[] = []
+    for (const res of result.nodes.values()) {
+      for (const port of res.inputs) {
+        if (!shortfall(port)) continue
+        const from = (left.get(port.item) ?? [])
+          .filter((m) => m.node !== res.id && !p.edges.some((e) => e.source === m.node && e.target === res.id && e.item === port.item))
+          .sort((a, b) => b.amount - a.amount)[0]
+        if (from) edges.push({ id: `${from.node}->${res.id}:${port.item}`, source: from.node, target: res.id, item: port.item })
+      }
+    }
+    if (!edges.length) break
+    p = { ...p, edges: [...p.edges, ...edges] }
+  }
+  return p
 }
 
 /** A node of the new plan with its activity, as a producer and consumer of items. */

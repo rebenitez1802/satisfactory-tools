@@ -75,6 +75,12 @@ describe('solveLp', () => {
     expect(r.value).toBeCloseTo(12)
   })
 
+  it('sets aside a direction that only improves by rounding noise', () => {
+    // x0 ≤ 5; x1 can grow forever but is worth almost nothing.
+    const r = optimal({ vars: 2, objective: [-1, -1e-8], constraints: [{ terms: [[0, 1]], op: '<=', rhs: 5 }] })
+    expect(r.x[0]).toBeCloseTo(5)
+  })
+
   it('treats a recipe chain as flows', () => {
     // Ore → ingots (1:1) or → ingots via a 2:3 alternate; 90 ingots wanted.
     // Variables: x0 standard machines (30/min), x1 alternate (in 20, out 30), x2 ore.
