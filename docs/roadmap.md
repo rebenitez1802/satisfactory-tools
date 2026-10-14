@@ -33,6 +33,7 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | 14 | [Belt line style in the balancer](#14-belt-line-style-in-the-balancer) | M3 | Low | XS | Later |
 | 15 | [Power goal](#15-power-goal) | M3 | Low | S–M | Later |
 | 16 | [Byproduct loops](#16-byproduct-loops) | M3 | High | M–L | Later, needs design |
+| 18 | [How to belt or pipe a connection](#18-how-to-belt-or-pipe-a-connection) | M3 | Low | S–M | Later, after #4 |
 | — | [Mods and data tooling](#deferred-mods-and-data-tooling) | — | — | — | Deferred |
 
 When an item ships, change its status to **Done (PR #n)** and move its rules
@@ -53,6 +54,7 @@ them in this order:
 | 4 | Optimize | #6 (UI), #11 | The Optimize action; world node counts weigh "fewest raw resources". |
 | 5 | Use leftovers | #17 | Builds on #2 (adding nodes) and #6 (ranking suggestions). |
 | any time | Small standalones | #9, #15, #14 | Independent; slot one in between the big ones. |
+| later | Low priority | #18 | Builds on #4's belt counts. |
 | blocked | — | #10 | Waits on the user's rules. |
 
 ---
@@ -532,6 +534,44 @@ sizing each generator group by hand. A nice-to-have: per-group 🎯 MW targets
     what they make).
 - **Done when:** a coal plan set to "cover the plan's use" shows net ≥ 0, and
   changing the factory updates the generator count.
+
+### 18. How to belt or pipe a connection
+
+**Value:** low priority, asked for by the user on 2026-10-14. #4 says *how
+many* belts an edge needs ("2000 · 2× Mk.6"); this says *how to build them*.
+**Effort:** S–M. Do it after #4.
+
+- **The idea:** an edge joins two machine groups, so it never has to be one
+  belt. For an edge carrying 2000/min, suggest a concrete way to carry it:
+  - **How many belts, of which tier:** the fewest belts of the plan's tier,
+    and the alternatives with other tiers (2000/min: 2× Mk.6, 3× Mk.5,
+    5× Mk.4, …). With no tier set, show the options anyway.
+  - **How to divide the flow:** even (2 × 1000) or fill-first (1200 + 800).
+    Prefer even, since each belt then has headroom.
+  - **Which machines feed which belt:** split the producing group into
+    sub-groups, each fitting on one belt. Example: 20 machines making
+    100/min each = 2000/min → 2 belts of 10 machines (1000/min each). With a fractional
+    count (7.5 machines), say which belt gets the partly-clocked machine.
+  - **Same at the consumer end:** which consumers each belt feeds, so the
+    belts stay separate and no merger or splitter is needed. If the counts
+    don't line up, say where a splitter or merger goes, and link to the load
+    balancer (`#/balancer?in=…&out=…`) for the uneven case.
+- **Pipes work the same way,** with the pipe tier (Mk.1 300, Mk.2 600):
+  900 m³/min of water → 2 pipes, e.g. 4 Water Extractors on one pipe (480)
+  and 3.5 on the other (420).
+- **UX** (ask the user before building):
+  - A "How to build" section in the belt inspector (`EdgeInspector` in
+    `Inspector.tsx`), shown when the edge needs more than one belt or pipe.
+  - Maybe a hint on the edge label too.
+- **Implementation:**
+  - A pure helper in `src/planner/` (e.g. `beltPlan(perMin, tiers, from,
+    to)`), taking the producing and consuming groups' machine counts and
+    per-machine rates from `SolveResult`. Use catalog tiers, never literal
+    rates.
+  - Edges from a split, or into a merge, only carry part of a group's
+    output. Use the edge's own rate and share of the group.
+- **Tests:** unit tests for the helper (even splits, fractional counts, pipes,
+  no tier set), and a screenshot of the inspector.
 
 ---
 

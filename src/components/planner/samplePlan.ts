@@ -12,7 +12,7 @@ export function samplePlan(): Plan {
     schemaVersion: 1,
     name: 'Reinforced Iron Plates',
     packs: [{ id: 'base', version: '1.2.0' }],
-    settings: { machineMode: 'fractional', beltTier: b('Build_ConveyorBeltMk2_C'), pipeTier: b('Build_Pipeline_C') },
+    settings: { machineMode: 'fractional' },
     nodes: [
       {
         id: 'ore',

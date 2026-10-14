@@ -235,15 +235,24 @@ function ExtractorCard({ data, selected }: NodeProps<PlanFlowNode>) {
     .join(', ')
   const needsMore = !node.limited && (res.utilization ?? 0) > 1 + EPS
   const capacity = res.capacity ?? 0
-  const tip = [
-    `${resource.name} — ${machine.name} on ${sites || 'no'} node(s)`,
-    node.limited
-      ? `Produces up to ${fmt(capacity)}${unit(resource)}, using ${fmt(res.activity)}`
-      : `Supplies ${fmt(res.activity)}${unit(resource)} (these nodes give ${fmt(capacity)})`,
-    `Runs @ ${pct(res.clock ?? 0)} · ⚡ ${mw(res.powerMw)}`,
-    needsMore ? `Needs ${pct(res.utilization!)} of these nodes` : '',
-    res.bottleneck ? 'Bottleneck' : '',
-  ]
+  // Extractors built anywhere (water) size their own count, like machines.
+  const setup = res.setup
+  const tip = (
+    setup
+      ? [
+          `${resource.name} — ${fmt(setup.count)} × ${machine.name} @ ${pct(setup.clock)}`,
+          `Supplies ${fmt(res.activity)}${unit(resource)} · ⚡ ${mw(res.powerMw)}`,
+        ]
+      : [
+          `${resource.name} — ${machine.name} on ${sites || 'no'} node(s)`,
+          node.limited
+            ? `Produces up to ${fmt(capacity)}${unit(resource)}, using ${fmt(res.activity)}`
+            : `Supplies ${fmt(res.activity)}${unit(resource)} (these nodes give ${fmt(capacity)})`,
+          `Runs @ ${pct(res.clock ?? 0)} · ⚡ ${mw(res.powerMw)}`,
+          needsMore ? `Needs ${pct(res.utilization!)} of these nodes` : '',
+        ]
+  )
+    .concat(res.bottleneck ? 'Bottleneck' : '')
     .filter(Boolean)
     .join('\n')
 
@@ -254,7 +263,9 @@ function ExtractorCard({ data, selected }: NodeProps<PlanFlowNode>) {
         {fmt(node.limited ? capacity : res.activity)}
         <span className="pn-unit">{unit(resource)}</span>
       </span>
-      <span className="pn-small">{sites}</span>
+      <span className="pn-small">
+        {setup ? `${fmt(setup.count)}×${Math.abs(setup.clock - 1) > EPS ? ` @ ${pct(setup.clock)}` : ''}` : sites}
+      </span>
       {node.limited && res.activity < capacity - EPS && <span className="pn-small pn-warn">using {fmt(res.activity)}</span>}
       <Label node={node} />
     </Card>

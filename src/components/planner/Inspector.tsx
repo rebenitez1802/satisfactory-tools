@@ -338,7 +338,9 @@ function ExtractorFields({ node, catalog, actions }: { node: ExtractorNode; cata
   const purity = node.sites.find((s) => s.count > 0)?.purity ?? defaultPurity(catalog)
   const setSingle = (p: string, count: number) => actions.update(node.id, { sites: count > 0 ? [{ purity: p, count }] : [] })
   const slots = sloopSlots(machine)
-  const what = spec.poweredBy ? 'satellite node' : 'node'
+  const what = spec.anywhere ? 'extractor' : spec.poweredBy ? 'satellite node' : 'node'
+  // Built anywhere (water): a flexible group sizes its own count.
+  const autoCount = spec.anywhere && !node.limited
 
   return (
     <>
@@ -373,36 +375,47 @@ function ExtractorFields({ node, catalog, actions }: { node: ExtractorNode; cata
           <Seg value={purity} options={tiers.map((t): [string, string] => [t.id, t.name])} onChange={(p) => setSingle(p, Math.max(1, total))} />
         </Field>
       )}
-      <Field label={spec.usesPurity && mixed ? `${what[0].toUpperCase()}${what.slice(1)}s by purity` : `How many ${what}s`}>
-        {spec.usesPurity && mixed ? (
-          tiers.map((t) => (
-            <div key={t.id} className="pn-insp-row pn-insp-purity">
-              <span>{t.name}</span>
-              <span className="pn-dim">×{t.multiplier}</span>
-              <Stepper value={countOf(t.id)} onChange={(c) => setCount(t.id, c)} />
+      {!autoCount && (
+        <Field label={spec.usesPurity && mixed ? `${what[0].toUpperCase()}${what.slice(1)}s by purity` : `How many ${what}s`}>
+          {spec.usesPurity && mixed ? (
+            tiers.map((t) => (
+              <div key={t.id} className="pn-insp-row pn-insp-purity">
+                <span>{t.name}</span>
+                <span className="pn-dim">×{t.multiplier}</span>
+                <Stepper value={countOf(t.id)} onChange={(c) => setCount(t.id, c)} />
+              </div>
+            ))
+          ) : (
+            <div className="pn-insp-row pn-insp-purity">
+              <span>{spec.usesPurity ? `${catalog.purities.get(purity)?.name ?? ''} ${what}s` : 'Extractors'}</span>
+              <Stepper value={total} onChange={(c) => setSingle(purity, c)} />
             </div>
-          ))
-        ) : (
-          <div className="pn-insp-row pn-insp-purity">
-            <span>{spec.usesPurity ? `${catalog.purities.get(purity)?.name ?? ''} ${what}s` : 'Extractors'}</span>
-            <Stepper value={total} onChange={(c) => setSingle(purity, c)} />
-          </div>
-        )}
-        {spec.usesPurity && (
-          <button
-            type="button"
-            className="pn-link"
-            onClick={() => {
-              if (mixed) setSingle(purity, total)
-              setMixed(!mixed)
-            }}
-          >
-            {mixed ? 'Use a single purity' : 'Mixed purities…'}
-          </button>
-        )}
-      </Field>
+          )}
+          {spec.usesPurity && (
+            <button
+              type="button"
+              className="pn-link"
+              onClick={() => {
+                if (mixed) setSingle(purity, total)
+                setMixed(!mixed)
+              }}
+            >
+              {mixed ? 'Use a single purity' : 'Mixed purities…'}
+            </button>
+          )}
+        </Field>
+      )}
       <SizingField node={node} actions={actions} />
-      <Field label="Clock speed" hint={node.limited ? 'What these nodes give at this clock is the limit.' : undefined}>
+      <Field
+        label="Clock speed"
+        hint={
+          node.limited
+            ? `What these ${what}s give at this clock is the limit.`
+            : autoCount
+              ? 'Preferred clock: the extractor count adapts to it.'
+              : undefined
+        }
+      >
         <ClockField value={node.clock} min={minClock(machine)} max={maxClock(machine)} onChange={(clock) => actions.update(node.id, { clock })} />
       </Field>
       {slots > 0 && (

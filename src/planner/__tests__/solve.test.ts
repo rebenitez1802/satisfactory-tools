@@ -305,6 +305,55 @@ describe('solver', () => {
   })
 })
 
+describe('water extractors', () => {
+  // Water extractors go on any water, so a flexible group adds extractors
+  // instead of overclocking the one it was created with.
+  const PUMP = 'Build_WaterPump_C'
+  const water = (o = {}) => extractorNode('water', PUMP, 'Desc_Water_C', [{ purity: 'base:normal', count: 1 }], o)
+  const pumps = (source: PlanNode, target: number | 'max', settings?: Plan['settings']) =>
+    solvePlan(plan([source, goalNode('goal', 'Desc_Water_C', target)], [['water', 'goal', 'Desc_Water_C']], settings && { settings }), catalog)
+
+  it('adds extractors at the preferred clock', () => {
+    const r = pumps(water(), 900)
+    const n = r.nodes.get('water')!
+    expect(n.activity).toBeCloseTo(900)
+    expect(n.setup).toMatchObject({ count: expect.closeTo(7.5), clock: 1, shards: 0, feasible: true })
+    expect(n.clock).toBeUndefined()
+    expect(n.utilization).toBeUndefined()
+    expect(r.diagnostics).toEqual([])
+    expect(r.totals.powerMw).toBeCloseTo(7 * 20 + 20 * 0.5 ** 1.321929)
+    expect(r.totals.machines.get(`base:${PUMP}`)).toBeCloseTo(7.5)
+    expect(r.totals.shards).toBe(0)
+  })
+
+  it('rounds up to whole extractors in whole-machine mode', () => {
+    const r = pumps(water(), 900, { machineMode: 'underclock' })
+    expect(r.nodes.get('water')!.setup).toMatchObject({ count: 8, clock: expect.closeTo(0.9375) })
+  })
+
+  it('keeps an overclock the player asked for', () => {
+    const r = pumps(water({ clock: 2.5 }), 900)
+    expect(r.nodes.get('water')!.setup).toMatchObject({ count: expect.closeTo(3), clock: 2.5, shards: 3 })
+    expect(r.totals.shards).toBe(9)
+  })
+
+  it('a limited group is still a hard limit', () => {
+    const r = pumps(water({ limited: true, sites: [{ purity: 'base:normal', count: 2 }] }), 900)
+    const n = r.nodes.get('water')!
+    expect(r.goals[0].achieved).toBeCloseTo(240)
+    expect(n.bottleneck).toBe(true)
+    expect(n.setup).toBeUndefined()
+    expect(n.capacity).toBeCloseTo(240)
+  })
+
+  it('miners still need the nodes they are on', () => {
+    const r = ironChain(extractorNode('ore', 'Build_MinerMk1_C', ORE, [{ purity: 'base:normal', count: 1 }]), 120)
+    expect(r.nodes.get('ore')!.clock).toBeCloseTo(3)
+    expect(r.nodes.get('ore')!.setup).toBeUndefined()
+    expect(r.diagnostics).toEqual([expect.objectContaining({ nodeId: 'ore', message: 'Needs more resource nodes than configured.' })])
+  })
+})
+
 const REFINERY = 'Build_OilRefinery_C'
 const NUCLEAR = 'Build_GeneratorNuclear_C'
 const reactor = (id: string, fuel: string, o: object = {}) => recipeNode(id, `Recipe_GeneratorNuclear_${fuel}_C`, NUCLEAR, o)

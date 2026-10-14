@@ -1895,7 +1895,8 @@
       "Desc_Water_C"
      ],
      "ratePerMin": 120,
-     "usesPurity": false
+     "usesPurity": false,
+     "anywhere": true
     },
     "icon": "icons/Build_WaterPump_C.png"
    }
