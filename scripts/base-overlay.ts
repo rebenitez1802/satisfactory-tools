@@ -2,7 +2,7 @@
 // from the game's 1.2 data dump and satisfactory.wiki.gg (Production
 // amplification, Clock speed, Conveyor Belts, Pipelines, Resource node).
 
-import type { AmplifierSpec, OverclockSpec, Purity, TransportTier } from '../src/catalog/types.ts'
+import type { AmplifierSpec, OverclockSpec, Purity, TransportTier, WorldMap } from '../src/catalog/types.ts'
 
 export const GAME_VERSION = '1.2'
 
@@ -71,16 +71,18 @@ interface ExtractorExtra {
   usesPurity: boolean
   /** Placed on any water, not on resource nodes: no limit on how many. */
   anywhere?: boolean
+  /** The kind of world site it goes on, counted per map (WORLD). */
+  site?: 'node' | 'well'
   poweredBy?: string
   /** For extractors greeny doesn't list under `miners`. */
   fallback?: { resources: string[]; ratePerMin: number }
 }
 
 export const EXTRACTORS: Record<string, ExtractorExtra> = {
-  Build_MinerMk1_C: { belt: [0, 1], pipe: [0, 0], usesPurity: true },
-  Build_MinerMk2_C: { belt: [0, 1], pipe: [0, 0], usesPurity: true },
-  Build_MinerMk3_C: { belt: [0, 1], pipe: [0, 0], usesPurity: true },
-  Build_OilPump_C: { belt: [0, 0], pipe: [0, 1], usesPurity: true },
+  Build_MinerMk1_C: { belt: [0, 1], pipe: [0, 0], usesPurity: true, site: 'node' },
+  Build_MinerMk2_C: { belt: [0, 1], pipe: [0, 0], usesPurity: true, site: 'node' },
+  Build_MinerMk3_C: { belt: [0, 1], pipe: [0, 0], usesPurity: true, site: 'node' },
+  Build_OilPump_C: { belt: [0, 0], pipe: [0, 1], usesPurity: true, site: 'node' },
   Build_WaterPump_C: {
     belt: [0, 0],
     pipe: [0, 1],
@@ -88,7 +90,7 @@ export const EXTRACTORS: Record<string, ExtractorExtra> = {
     anywhere: true,
     fallback: { resources: ['Desc_Water_C'], ratePerMin: 120 },
   },
-  Build_FrackingExtractor_C: { belt: [0, 0], pipe: [0, 1], usesPurity: true, poweredBy: 'Build_FrackingSmasher_C' },
+  Build_FrackingExtractor_C: { belt: [0, 0], pipe: [0, 1], usesPurity: true, site: 'well', poweredBy: 'Build_FrackingSmasher_C' },
 }
 
 /** Machines that exist only to power other extractors. */
@@ -115,4 +117,35 @@ export const GENERATORS: Record<string, { belt: [number, number]; pipe: [number,
 export const FUEL_WASTE: Record<string, { item: string; amount: number }> = {
   Desc_NuclearFuelRod_C: { item: 'Desc_NuclearWaste_C', amount: 50 },
   Desc_PlutoniumFuelRod_C: { item: 'Desc_PlutoniumWaste_C', amount: 10 },
+}
+
+/**
+ * Resource sites on the default map, as [impure, normal, pure], from the
+ * per-resource pages on satisfactory.wiki.gg (checked 2026-10-14 against each
+ * page's "max per minute" figure: e.g. iron 39×300 + 42×600 + 46×1200 =
+ * 92100). Geysers are left out with the geothermal generator.
+ */
+const DEFAULT_SITES: [resource: string, site: 'node' | 'well', counts: [number, number, number]][] = [
+  ['Desc_OreIron_C', 'node', [39, 42, 46]],
+  ['Desc_OreCopper_C', 'node', [13, 29, 13]],
+  ['Desc_Stone_C', 'node', [15, 50, 29]],
+  ['Desc_Coal_C', 'node', [15, 31, 16]],
+  ['Desc_OreGold_C', 'node', [0, 9, 8]],
+  ['Desc_RawQuartz_C', 'node', [3, 7, 7]],
+  ['Desc_Sulfur_C', 'node', [6, 5, 5]],
+  ['Desc_OreBauxite_C', 'node', [5, 6, 6]],
+  ['Desc_OreUranium_C', 'node', [3, 2, 0]],
+  ['Desc_SAM_C', 'node', [10, 6, 3]],
+  ['Desc_LiquidOil_C', 'node', [10, 12, 8]],
+  ['Desc_LiquidOil_C', 'well', [8, 6, 4]],
+  ['Desc_NitrogenGas_C', 'well', [2, 7, 36]],
+  ['Desc_Water_C', 'well', [7, 12, 36]],
+]
+
+export const WORLD: WorldMap = {
+  id: 'default',
+  name: 'Default map',
+  sites: DEFAULT_SITES.flatMap(([resource, site, counts]) =>
+    counts.flatMap((count, i) => (count > 0 ? [{ resource, site, purity: PURITIES[i].id, count }] : [])),
+  ),
 }

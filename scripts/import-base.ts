@@ -23,6 +23,7 @@ import {
   TRANSPORT_TIERS,
   UPGRADE_ITEMS,
   VARIABLE_POWER,
+  WORLD,
 } from './base-overlay.ts'
 import { GREENY_COMMIT, loadGreeny, ROOT } from './greeny.ts'
 
@@ -109,6 +110,7 @@ for (const [id, extra] of Object.entries(EXTRACTORS)) {
       ...extraction,
       usesPurity: extra.usesPurity,
       ...(extra.anywhere ? { anywhere: true } : {}),
+      ...(extra.site ? { site: extra.site } : {}),
       ...(extra.poweredBy ? { poweredBy: extra.poweredBy } : {}),
     },
   })
@@ -182,11 +184,11 @@ const pack: DataPack = {
     name: 'Satisfactory (base game)',
     version: `${GAME_VERSION}.0`,
     gameVersion: GAME_VERSION,
-    description: 'Vanilla items, machines and recipes.',
+    description: 'Vanilla items, machines, recipes and the default map.',
     credits: [
       'Game content and icons © Coffee Stain Studios.',
       `Recipe data from greeny/SatisfactoryTools (MIT), commit ${GREENY_COMMIT.slice(0, 7)}.`,
-      'Icons from the Official Satisfactory Wiki (satisfactory.wiki.gg).',
+      'Icons and resource node counts from the Official Satisfactory Wiki (satisfactory.wiki.gg).',
     ],
   },
   add: {
@@ -195,6 +197,7 @@ const pack: DataPack = {
     items,
     machines,
     recipes,
+    maps: [WORLD],
   },
 }
 

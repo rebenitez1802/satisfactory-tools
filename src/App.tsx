@@ -46,7 +46,7 @@ export function App() {
         </span>
         <span>
           A free, non-commercial fan tool, not affiliated with Coffee Stain Studios. Game
-          content and icons © Coffee Stain Studios; icons via the{' '}
+          content and icons © Coffee Stain Studios; icons and resource node counts via the{' '}
           <a href="https://satisfactory.wiki.gg/">Official Satisfactory Wiki</a>, recipe data via{' '}
           <a href="https://github.com/greeny/SatisfactoryTools">greeny/SatisfactoryTools</a> (MIT).
         </span>

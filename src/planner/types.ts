@@ -7,7 +7,7 @@
 // generator groups carry a target, any other node may be `limited`, and
 // everything else is flexible and sized by the solver.
 
-import type { ItemId, MachineId, PurityId, RecipeId, TransportTierId } from '../catalog'
+import type { ItemId, MachineId, PurityId, RecipeId, TransportTierId, WorldSite } from '../catalog'
 
 /**
  * How machine counts are presented:
@@ -21,6 +21,11 @@ export interface PlanSettings {
   /** Belt and pipe marks used for over-capacity warnings. */
   beltTier?: TransportTierId
   pipeTier?: TransportTierId
+  /**
+   * The plan's own count of resource sites (1.2's World Randomization moves
+   * nodes around). Absent: the default map's.
+   */
+  world?: WorldSite[]
 }
 
 interface PlanNodeBase {

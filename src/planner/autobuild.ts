@@ -69,7 +69,7 @@ function mainProduct(node: PlanNode, catalog: Catalog): ItemId | undefined {
   }
 }
 
-const isGenerator = (catalog: Catalog, r: Recipe) => !!catalog.machines.get(r.machines[0])?.generation
+export const isGenerator = (catalog: Catalog, r: Recipe) => !!catalog.machines.get(r.machines[0])?.generation
 
 /** Inputs with no belt yet, optionally only on one node or for one item. */
 export function openInputs(plan: Plan, catalog: Catalog, only: { node?: string; item?: ItemId } = {}): PortRef[] {
@@ -136,7 +136,7 @@ function itemCosts(catalog: Catalog, usable: (r: Recipe) => boolean): Map<ItemId
 const recipeCost = (r: Recipe, cost: ReadonlyMap<ItemId, number>) => r.inputs.reduce((s, a) => s + (cost.get(a.item) ?? 1), 1)
 
 /** The extractor new nodes use: one with its own power (not a well satellite), fastest first. */
-function bestExtractor(catalog: Catalog, item: ItemId): Machine | undefined {
+export function bestExtractor(catalog: Catalog, item: ItemId): Machine | undefined {
   const ms = (catalog.extractorsFor.get(item) ?? []).map((id) => catalog.machines.get(id)!)
   const rank = (m: Machine) => (m.extraction?.poweredBy ? 0 : 1e9) + (m.extraction?.ratePerMin ?? 0)
   return ms.sort((a, b) => rank(b) - rank(a))[0]

@@ -1,4 +1,4 @@
-import type { Plan } from '../../planner'
+import type { Objective, Plan } from '../../planner'
 
 // Plans and preferences live in localStorage. Each plan is stored whole, keyed
 // by a local id; the active one is restored on the next visit.
@@ -32,6 +32,8 @@ export interface Prefs {
   buildReuse: boolean
   /** The recipe dropdown compares options at the node's rate rather than per machine. */
   compareAtRate: boolean
+  /** What ✨ Optimize minimizes. */
+  optimizeFor: Objective
 }
 
 function read<T>(key: string): T | null {
@@ -68,7 +70,7 @@ export function saveStore(store: PlanStore) {
 }
 
 export function loadPrefs(): Prefs {
-  return { lockedAlternates: [], edgeStyle: 'step', preferredRecipes: {}, buildReuse: true, compareAtRate: true, ...read<Prefs>(PREFS_KEY) }
+  return { lockedAlternates: [], edgeStyle: 'step', preferredRecipes: {}, buildReuse: true, compareAtRate: true, optimizeFor: 'resources', ...read<Prefs>(PREFS_KEY) }
 }
 
 export function savePrefs(prefs: Prefs) {

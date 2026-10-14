@@ -39,7 +39,9 @@ limited, and the solver sizes the rest (forward, backward or both).
 Generators (coal, fuel, biomass, nuclear) are recipe nodes with a 🎯 MW
 target or Max; the summary shows power used, made and net. Spare byproducts
 (nuclear waste, heavy oil residue, …) flow on into the chains they feed. ⚡ Build
-chain fills a goal or missing input back to raw resources. Splits
+chain fills a goal or missing input back to raw resources. ✨ Optimize picks
+the best recipes for the plan's goals with a linear program, weighing raw
+resources by how many nodes the map has, and previews the change. Splits
 open a read-only load balancer. A build checklist (✓ on each card) and the
 build cost help while building the plan in the game. Plans live in tabs and autosave to
 localStorage. Game data comes from **mod-ready data packs** (see "Production
@@ -129,9 +131,11 @@ src/
   planner/                  Planner logic, framework-free: plan types, rates/power, solve.ts
                             (targets & limits, byproduct stages), create/edit/place helpers,
                             layout.ts (Tidy, dagre), autobuild.ts (⚡ Build chain),
-                            buildcost.ts (build checklist, build cost)
+                            buildcost.ts (build checklist, build cost), optimize.ts (✨ Optimize)
+                            on lp.ts (simplex), world.ts (world node counts and caps)
   components/planner/       Planner UI: PlannerTool (state, tabs, history), PlanCanvas (React Flow),
-                            nodes.tsx (cards), Inspector, Picker, RecipeSelect, BalancerPopup, planner.css
+                            nodes.tsx (cards), Inspector, Picker, RecipeSelect, BalancerPopup,
+                            OptimizeModal, WorldModal, planner.css
   components/
     LoadBalancerTool.tsx    Left panel UI (input, outputs, belt tier, toggles) → calls solve()
     GraphView.tsx           React Flow canvas: custom node/edge types, handle

@@ -15,9 +15,9 @@ can I make from 90 iron ore/min?") and mixes of both. The data layer is in
    from your targets and limits.
 2. **Auto-build** (⚡ Build chain, below). Given a goal or a missing input,
    the app fills in the chain back to raw resources.
-3. **Optimize.** Given inputs and goals, the app picks recipes and shares
-   scarce resources with an LP solver (later). It uses the same targets and
-   limits as v1, so the UI doesn't change.
+3. **Optimize** (✨ Optimize, below). Given inputs and goals, the app picks
+   recipes and shares scarce resources with a linear program. It uses the
+   same targets and limits as v1.
 
 ## Nodes
 
@@ -347,10 +347,62 @@ byproducts (a recipe's second output, or all of a generator's outputs).
     beyond its mark.
   - A machine with no known cost is listed as "cost unknown", never counted
     as free. Belts, pipes, splitters and mergers aren't counted.
+- **✨ Optimize** (canvas toolbar) picks the recipes for the plan's goals
+  and rebuilds the plan around them, after showing what would change:
+  goals, power used, buildings and raw resources (now → optimized), the
+  machine groups it would use (alternates and new recipes marked), and any
+  warnings. **Apply** is one undo step and lays the whole plan out with
+  Tidy's rules; **Cancel** changes nothing. The rules (`optimize` in
+  `src/planner/optimize.ts`, on the simplex in `src/planner/lp.ts`):
+  - One objective, a preference: **fewest raw resources** (the default),
+    **least power** or **fewest buildings**. Raw resources are weighed by
+    how scarce the map makes them: the most common one (iron, 92100/min)
+    weighs 1, uranium (2100/min) 44, water from Water Extractors 0.1. Power
+    and buildings are counted at 100% clock. A second, tiny term breaks
+    ties (buildings, or resources), so no pointless loops make it in.
+  - It uses the standard recipes and the unlocked alternates, never locked
+    ones. Raw resources are mined, never made: the Converter's ore recipes
+    and unpackaging water or oil are left out, so a ⛔ limit on iron ore
+    holds. Items nothing makes and nothing mines (leaves, mycelia, …) come
+    from new supply nodes, only when there's no other way.
+  - **Kept:** goals, extractors, supplies, generators and ⛔ limited
+    machine groups. **Replaced:** flexible machine groups. All belts are
+    drawn anew, except those touching a node whose content isn't loaded.
+  - A raw resource the plan already has an extractor or supply for comes
+    only from those (⛔ ones up to their limit), as ⚡ Build chain reuses
+    them. Otherwise new extractors are added, on normal purity, up to what
+    the map's sites give (see World nodes). An intermediate supply ("90
+    plates/min from the other factory") is used before making more.
+  - 🎯 targets (goals, and generators' MW) are met together. If the limits
+    can't take them all, every target is scaled by the same factor, and
+    the dialog says so: "The limits allow 50% of the 🎯 targets; the plan
+    is built for that."
+  - **Max** goals and Max generators get as much as the limits allow, after
+    the targets. Several Max goals each get the same share of what they
+    could reach alone. A Max goal with no ⛔ limit upstream is reported, and
+    nothing is proposed. Since new extractors are flexible, a Max goal may
+    take in new resources to stretch a limited one: 120 iron ore makes 153
+    Reinforced Iron Plates/min with oil-based alternates.
+  - Each recipe the program picks becomes one flexible group. When it runs
+    a recipe further than its main product's users take, for the byproduct
+    (2 Rubber refineries for 10 rubber and 40 heavy oil residue), the extra
+    is a second group whose main product stays unconnected, so the solver
+    pulls its byproduct. An input fed by several pulled producers gets
+    shares equal to the planned flows.
+  - Fractional machines are fine; the plan's machine mode shows them as
+    usual.
+- **World nodes:** the summary lists the resource nodes and well
+  satellites the plan's extractors use against what the map has (hover for
+  each purity), in red with a note when there are more than exist. A
+  ⛔ limited group counts the sites it lists; a flexible one the extractors
+  it needs, whole, on its purity. Water Extractors aren't counted. The
+  counts are the default map's (from the wiki), or the plan's own, edited
+  under Settings → World nodes (1.2's World Randomization moves nodes);
+  *Reset* goes back to the map's. ✨ Optimize never plans past them.
 - **Preferences** apply to every plan: unlocked alternates, belt line style
   (angled, straight or curved), whether ⚡ Build chain reuses nodes, the
-  recipe last picked per item, and whether the recipe picker compares at the
-  node's rate.
+  recipe last picked per item, whether the recipe picker compares at the
+  node's rate, and what ✨ Optimize minimizes.
 
 ## Build steps
 

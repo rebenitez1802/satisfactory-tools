@@ -10,7 +10,7 @@
 
 import { ENTITY_KINDS } from './pack'
 import type { DataPack, EntityKind, PackEntities } from './pack'
-import type { Catalog, Id, ItemId, Machine, MachineId, PackInfo, Recipe, RecipeId } from './types'
+import type { Catalog, Id, ItemId, Machine, MachineId, PackInfo, Recipe, RecipeId, WorldMap } from './types'
 
 export interface Diagnostic {
   severity: 'error' | 'warning'
@@ -85,6 +85,9 @@ function qualifyEntity<K extends EntityKind>(
         ...(m.extraction.poweredBy ? { poweredBy: qualify(m.extraction.poweredBy, packId) } : {}),
       }
     }
+  } else if (kind === 'maps') {
+    const w = entity as Partial<WorldMap>
+    if (w.sites) out.sites = w.sites.map((s) => ({ ...s, resource: qualify(s.resource, packId), purity: qualify(s.purity, packId) }))
   }
   return out as Partial<PackEntities[K]>
 }
@@ -161,6 +164,7 @@ export function buildCatalog(packs: DataPack[], opts: BuildOptions = {}): BuildR
     recipes: new Map(),
     purities: new Map(),
     transportTiers: new Map(),
+    maps: new Map(),
   }
 
   for (const pack of order) {
@@ -246,6 +250,14 @@ function validateReferences(store: Store, diagnostics: Diagnostic[]) {
     store.machines.set(id, { ...store.machines.get(id)!, extraction: { ...m.extraction, resources, poweredBy } })
   }
 
+  for (const [id, w] of store.maps) {
+    const sites = (w.sites ?? []).filter((s) => store.items.has(s.resource) && store.purities.has(s.purity))
+    if (sites.length !== (w.sites ?? []).length) {
+      diagnostics.push({ severity: 'warning', pack: packOf(id), id, message: `Map "${id}" lists sites with unknown resources or purities; ignoring them.` })
+    }
+    store.maps.set(id, { ...w, sites })
+  }
+
   for (const [id, r] of store.recipes) {
     const missingItems = [...r.inputs, ...r.outputs].map((a) => a.item).filter((i) => !store.items.has(i))
     const machines = r.machines.filter((m) => store.machines.has(m))
@@ -293,6 +305,7 @@ function indexCatalog(store: Store, packs: PackInfo[]): Catalog {
     recipes: store.recipes,
     purities: store.purities,
     transportTiers: store.transportTiers,
+    maps: store.maps,
     recipesProducing,
     recipesConsuming,
     extractorsFor,
