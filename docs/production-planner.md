@@ -171,14 +171,24 @@ byproducts (a recipe's second output, or all of a generator's outputs).
   - Several inputs fed by one byproduct take it in plan order. Fertile
     Uranium's 40 m³/min of water covers its sulfuric (25) and nitric (15)
     acid exactly, with nothing else needed.
+- **So are byproducts feeding their maker's own goal.** Alumina Solution's
+  silica belted to the Aluminum Ingot foundry that the alumina is made for,
+  or the polymer resin of the *Heavy Oil Residue* alternate going to
+  Residual Rubber for the same goal, follow the same rules as a loop: used
+  first, other producers make up the rest, and what nothing else covers is
+  missing. 60 ingots take the alumina's 25 silica and make the other 50 from
+  30 quartz. (These used to be cut into a later stage, which left the
+  maker's stage with nothing to run for: the silica came out as 0, and a
+  consumer fed by nothing else scaled the goal down to 0.)
 - Technically the solver cuts the plan at those byproduct belts into
   *stages*, solves them makers first, and hands each stage the spare as a
   limited supply. A node's stage is the number of cut belts on its longest
   way in. Each stage also takes in the nodes upstream of it from earlier
   stages, adding its demand to theirs, with only the room their limits have
-  left. A byproduct belt that loops back into its maker's own chain can't be
-  cut, so it stays in its maker's stage as a *spare belt*: it doesn't pull
-  on the maker, and carries what the maker makes at the rate it settles at.
+  left. A byproduct belt that loops back into its maker's own chain, or
+  whose consumer leads on to an anchor the maker runs for, can't be cut, so
+  it stays in its maker's stage as a *spare belt*: it doesn't pull on the
+  maker, and carries what the maker makes at the rate it settles at.
 
 ## Presentation
 
