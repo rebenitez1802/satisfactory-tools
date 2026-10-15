@@ -52,6 +52,23 @@ Every generated graph is checked by a **flow simulator** that iterates the
 network to steady state and confirms each output matches its target before the
 graph is displayed, so loop designs are proven correct, not guessed.
 
+#### Several inputs
+
+A big flow in the game comes from many machines, each with its own output, and
+no belt carries more than its tier (1200/min on Mk.6). Switch the input to
+**Several** to give a list of input belts as `count × rate` rows (8 × 250, or
+7.5 × 100 for seven machines and one at half clock). Links take
+`in=8x250`, repeated `in=` values, and `cap=1200` for the belt cap.
+
+Instead of merging every input onto one trunk and splitting it again, the
+inputs are **packed**, as in a transportation problem: each output collects
+whole inputs that fit it, and only the few inputs that straddle two outputs
+are split, each by the single-input construction above. 20 machines at
+100/min into 1200 / 800 take no splitter at all. With a belt cap, an output
+above it leaves on several equal belts, so no merger tree carries more than
+the cap. **Group onto belts** puts a machine group's inputs on the fewest
+belts of the cap first, which is fewer inputs but usually more splitting.
+
 ### Production Chains
 
 Plan a factory from resource nodes to products. Add a miner on the nodes you

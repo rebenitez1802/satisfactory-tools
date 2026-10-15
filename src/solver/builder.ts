@@ -49,7 +49,7 @@ export function factorizeSmooth(b: number): number[] {
   return factors
 }
 
-class Builder {
+export class Builder {
   nodes: GNode[] = []
   edges: GEdge[] = []
   private counters: Record<string, number> = {}
@@ -191,24 +191,24 @@ export interface BuiltGraph {
   loopbacks: number
 }
 
+export interface Division {
+  /** Per ratio, the ports whose belts together carry its share. */
+  streams: string[][]
+  leafCount: number
+  loopbacks: number
+  /** Merge the looped-back belts into the trunk. Call it after the outputs' merger trees. */
+  closeLoop: () => void
+}
+
 /**
- * Build the balancer graph for an already-reduced set of ratios.
- * `ratios` must be positive integers; N is their sum.
+ * Divide the belt leaving `producer` into `ratios` (positive integers) inside
+ * builder `b`. When their sum isn't 3-smooth, the trunk is grown with a loop:
+ * a merger takes the producer's belt plus the returned belts.
  */
-export function buildBalancer(ratios: number[], outputLabels?: (string | undefined)[]): BuiltGraph {
+export function divide(b: Builder, producer: string, ratios: number[]): Division {
   const N = ratios.reduce((s, r) => s + r, 0)
   const B = smooth3AtLeast(N)
   const feedback = B - N
-
-  const b = new Builder()
-  const source = b.addNode('source', { label: 'Input' })
-  const sinkIds = ratios.map((_, i) => b.addNode('sink', { label: outputLabels?.[i] }))
-
-  // Degenerate case: a single output equal to the whole input.
-  if (B === 1) {
-    b.addEdge(source, sinkIds[0])
-    return { graph: { nodes: b.nodes, edges: b.edges }, leafCount: 1, loopbacks: 0 }
-  }
 
   // Demands: one per output, plus the loopback remainder if N isn't 3-smooth.
   const demands: Demand[] = ratios.map((r, i) => ({ id: `out${i}`, amt: r }))
@@ -222,22 +222,39 @@ export function buildBalancer(ratios: number[], outputLabels?: (string | undefin
   }
 
   // The trunk carries B units. With a loopback it is fed by a merger that
-  // combines the source with the returned belts; otherwise the source feeds it.
+  // combines the input with the returned belts; otherwise the input feeds it.
   const trunkMerger = feedback > 0 ? b.addNode('merger') : null
-  distribute(b, trunkMerger ?? source, B, demands, deliver)
+  distribute(b, trunkMerger ?? producer, B, demands, deliver)
 
-  // Each output collects its delivered pieces through a merger tree.
-  ratios.forEach((_, i) => {
-    const prod = b.mergeStreams(collectors.get(`out${i}`) ?? [])
-    b.addEdge(prod, sinkIds[i])
-  })
-
-  // Close the loop: returned belts merge back into the trunk alongside the input.
-  if (trunkMerger) {
+  const closeLoop = () => {
+    if (!trunkMerger) return
     const prod = b.mergeStreams(collectors.get('loop') ?? [], true)
-    b.addEdge(source, trunkMerger)
+    b.addEdge(producer, trunkMerger)
     b.addEdge(prod, trunkMerger, true)
   }
+  return { streams: ratios.map((_, i) => collectors.get(`out${i}`) ?? []), leafCount: B, loopbacks: feedback, closeLoop }
+}
 
-  return { graph: { nodes: b.nodes, edges: b.edges }, leafCount: B, loopbacks: feedback }
+/**
+ * Build the balancer graph for an already-reduced set of ratios.
+ * `ratios` must be positive integers; N is their sum.
+ */
+export function buildBalancer(ratios: number[], outputLabels?: (string | undefined)[]): BuiltGraph {
+  const b = new Builder()
+  const source = b.addNode('source', { label: 'Input' })
+  const sinkIds = ratios.map((_, i) => b.addNode('sink', { label: outputLabels?.[i] }))
+
+  // Degenerate case: a single output equal to the whole input.
+  if (ratios.length === 1) {
+    b.addEdge(source, sinkIds[0])
+    return { graph: { nodes: b.nodes, edges: b.edges }, leafCount: 1, loopbacks: 0 }
+  }
+
+  const { streams, leafCount, loopbacks, closeLoop } = divide(b, source, ratios)
+  // Each output collects its delivered pieces through a merger tree.
+  streams.forEach((ports, i) => b.addEdge(b.mergeStreams(ports), sinkIds[i]))
+  // Close the loop: returned belts merge back into the trunk alongside the input.
+  closeLoop()
+
+  return { graph: { nodes: b.nodes, edges: b.edges }, leafCount, loopbacks }
 }

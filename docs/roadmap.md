@@ -33,8 +33,8 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | 14 | [Belt line style in the balancer](#14-belt-line-style-in-the-balancer) | M3 | Low | XS | Later |
 | 15 | [Power goal](#15-power-goal) | M3 | Low | S–M | Later |
 | 16 | [Byproduct loops](#16-byproduct-loops) | M3 | High | M–L | Done (PR #15) |
-| 18 | [How to belt or pipe a connection](#18-how-to-belt-or-pipe-a-connection) | M3 | Low | S–M | Later, after #4 |
-| 19 | [Balancer with several inputs](#19-balancer-with-several-inputs) | M2 | Med–High | M | Planned, after #4 |
+| 18 | [How to belt or pipe a connection](#18-how-to-belt-or-pipe-a-connection) | M3 | Low | S–M | Done (PR #PRNUM) |
+| 19 | [Balancer with several inputs](#19-balancer-with-several-inputs) | M2 | Med–High | M | Done (PR #PRNUM) |
 | 20 | [Build cost](#20-build-cost) | M2 | Med–High | S–M | Done (PR #12) |
 | 21 | [Build checklist](#21-build-checklist) | M2 | High | S | Done (PR #12) |
 | 22 | [Resources to avoid](#22-resources-to-avoid) | M2 | High | S | Done (PR #19) |
@@ -56,7 +56,7 @@ them in this order. #19–#21 came from the user's testing of #2 on
 2026-10-14; "Build in game" goes before the solver work because it is small
 and useful straight away while playing. Reorder freely.
 
-**Next up (2026-10-14): order 7, Real belts (#19, #18).** Orders 1–6 are done.
+**Next up (2026-10-14): order 8, Use leftovers (#17).** Orders 1–7 are done.
 
 | Order | PR | Items | Why together |
 |---|---|---|---|
@@ -67,7 +67,7 @@ and useful straight away while playing. Reorder freely.
 | 5 | Optimize | #6, #11 | Done (PR #17), after a solver fix it needed (PR #16: byproducts feeding their maker's own goal). |
 | 6a | Resources to avoid | #22 | Done (PR #19). From the user's testing of #6 (2026-10-14): "build this without oil". Split from 6b on 2026-10-14: it covers the oil case alone and touches Optimize and Build chain, not prefs. |
 | 6b | Game progress | #23, #24 | Done (PR #20). Plan early in the game with only what's unlocked. Together because both reshape the Recipes dialog and prefs (one migration, `lockedAlternates` → `lockedRecipes` plus progress); #23 alone is mostly groundwork for #24. |
-| 7 | Real belts | #19, #18 | Both turn one logical flow into belts you can build, and share a helper that puts machines onto belts. Builds on #4's belt counts. |
+| 7 | Real belts | #19, #18 | Done (PR #PRNUM). Both turn one logical flow into belts you can build, and share a helper that puts machines onto belts (`src/planner/belts.ts`). |
 | 8 | Use leftovers | #17 | Builds on #2 (adding nodes) and #6 (ranking suggestions). |
 | any time | Small standalones | #9, #15, #14, #26 | Independent; slot one in between the big ones. |
 | later | Solver | #25 | Changes rates, so its own PR. |
@@ -457,6 +457,14 @@ since it reuses both.
     once it's added.
 
 ### 19. Balancer with several inputs
+
+**Done.** Its behaviour is in the [README](../README.md#several-inputs) and
+[production-planner.md](production-planner.md#presentation) ("Splits and
+merges"). Only *packing* was built: the user picked it over *proportional*
+(2026-10-14). Not done: grouping a mix of different input rates onto belts
+(the balancer's "Group onto belts" only handles one machine group). The
+popup starts with one input per machine, not grouped, even for big groups:
+grouping first means splitting again, which made far more complex graphs.
 
 **Value:** a realistic balancer for big flows. Asked for by the user on
 2026-10-14 while testing #2. **Effort:** M. Do it after #4, together with
@@ -865,6 +873,13 @@ sizing each generator group by hand. A nice-to-have: per-group 🎯 MW targets
   changing the factory updates the generator count.
 
 ### 18. How to belt or pipe a connection
+
+**Done.** Its behaviour is in
+[production-planner.md](production-planner.md#presentation) ("Edges"). It
+lives in the belt inspector only (the user's choice, 2026-10-14), with no
+hint on the edge label. Not done: suggesting where a splitter or merger goes
+when the two ends don't line up; the inspector says how many extra machines
+keeping the belts apart costs instead.
 
 **Value:** low priority, asked for by the user on 2026-10-14. #4 says *how
 many* belts an edge needs ("2000 · 2× Mk.6"); this says *how to build them*.

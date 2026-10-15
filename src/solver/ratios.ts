@@ -73,3 +73,31 @@ export function simpleRatios(values: number[], maxN = 120, tol = 1e-4): ReducedR
   }
   return undefined
 }
+
+/** Above this many shares, look for a simpler ratio the rates were meant to be. */
+const SIMPLE_MAX_N = 120
+
+export interface FittedRatios extends ReducedRatios {
+  /** The rates the ratios stand for: snapped when `snapped`, else as given. */
+  rates: number[]
+  /** True when the rates were snapped to a simpler ratio. */
+  snapped: boolean
+}
+
+/**
+ * Integer ratios for a set of rates. Rates without short decimals (thirds
+ * from recipe math, or rounded values like 33.33 / 66.67) reduce to enormous
+ * share counts, so they are snapped to the simple ratio they clearly
+ * represent, keeping their total. Throws if any rate is non-positive.
+ */
+export function fitRatios(rates: number[]): FittedRatios {
+  const reduced = reduceRatios(rates)
+  if (reduced.N > SIMPLE_MAX_N) {
+    const simple = simpleRatios(rates, SIMPLE_MAX_N)
+    if (simple) {
+      const total = rates.reduce((s, v) => s + v, 0)
+      return { ...simple, rates: simple.ratios.map((r) => (total * r) / simple.N), snapped: true }
+    }
+  }
+  return { ...reduced, rates, snapped: false }
+}

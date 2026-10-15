@@ -1463,3 +1463,29 @@
 .pn-opt-avoid .pn-opt-hint {
   margin: 4px 0 0;
 }
+
+/* Belt inspector: how to build an edge on several belts or pipes */
+.pn-belt-plan {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.pn-belt-plan th,
+.pn-belt-plan td {
+  padding: 3px 10px 3px 0;
+  text-align: right;
+}
+.pn-belt-plan th {
+  font-weight: 500;
+  color: var(--text-dim);
+  vertical-align: bottom;
+}
+.pn-belt-plan th:first-child,
+.pn-belt-plan td:first-child {
+  text-align: left;
+}
+
+/* Load balancer popup: the inputs toggle keeps its size in the header */
+.pn-modal-head > .pn-seg-small {
+  flex: none;
+  align-self: center;
+}

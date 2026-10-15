@@ -1,13 +1,12 @@
 // Top-level entry point: turn a desired input + outputs into a verified graph.
 
 import { buildBalancer } from './builder'
-import { reduceRatios, simpleRatios } from './ratios'
+import { solveMulti } from './multi'
+import { fitRatios } from './ratios'
 import { simulate } from './simulate'
 import type { SolveInput, SolveResult, SolveWarning } from './types'
 
 const REL_TOL = 1e-6
-/** Above this many shares, look for a simpler ratio the rates were meant to be. */
-const SIMPLE_MAX_N = 120
 
 function round(n: number, dp = 4): number {
   const f = Math.pow(10, dp)
@@ -15,6 +14,7 @@ function round(n: number, dp = 4): number {
 }
 
 export function solve(input: SolveInput): SolveResult {
+  if (input.inputs && input.inputs.length > 1) return solveMulti(input.inputs, input.outputs, input.beltMax)
   const warnings: SolveWarning[] = []
   const { input: inputRate, beltMax } = input
   let { outputs } = input
@@ -47,27 +47,17 @@ export function solve(input: SolveInput): SolveResult {
     outputs = [...outputs, { label: 'Leftover', rate: leftover }]
   }
 
-  let reduced
+  let fitted
   try {
-    reduced = reduceRatios(outputs.map((o) => o.rate))
+    fitted = fitRatios(outputs.map((o) => o.rate))
   } catch (err) {
     return { ok: false, warnings, error: (err as Error).message }
   }
-  // Rates without short decimals (thirds from recipe math, or rounded values
-  // like 33.33 / 66.67) reduce to enormous share counts. Snap them to the
-  // simple ratio they clearly represent.
-  if (reduced.N > SIMPLE_MAX_N) {
-    const simple = simpleRatios(outputs.map((o) => o.rate), SIMPLE_MAX_N)
-    if (simple) {
-      reduced = simple
-      outputs = outputs.map((o, i) => ({ ...o, rate: (inputRate * simple.ratios[i]) / simple.N }))
-      warnings.push({
-        kind: 'info',
-        message: `Rates were treated as the exact ratio ${simple.ratios.join(' : ')}.`,
-      })
-    }
+  const { ratios, N } = fitted
+  if (fitted.snapped) {
+    outputs = outputs.map((o, i) => ({ ...o, rate: fitted.rates[i] }))
+    warnings.push({ kind: 'info', message: `Rates were treated as the exact ratio ${ratios.join(' : ')}.` })
   }
-  const { ratios, N } = reduced
 
   const labels = outputs.map((o) => o.label)
   const { graph, leafCount, loopbacks } = buildBalancer(ratios, labels)

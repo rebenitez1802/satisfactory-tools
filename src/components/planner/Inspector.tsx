@@ -4,8 +4,10 @@
 import { useState, type ReactNode } from 'react'
 import type { Catalog, Machine } from '../../catalog'
 import {
+  beltPlan,
   defaultPurity,
   doneShortfall,
+  groupEnd,
   maxClock,
   missingInputs,
   minClock,
@@ -16,7 +18,9 @@ import {
   sameProductRecipes,
   shardsNeeded,
   sloopSlots,
+  transportOptions,
 } from '../../planner'
+import type { GroupEnd } from '../../planner'
 import type { EdgeResult, ExtractorNode, GoalNode, MachineMode, NodeResult, Plan, PlanEdge, PlanNode, RecipeNode, SolveResult, SupplyNode } from '../../planner'
 import { fmt, mw, pct, tierName } from './format'
 import { Icon } from './Icon'
@@ -703,6 +707,79 @@ function BeltCount({ r, fluid, plan, catalog }: { r: EdgeResult; fluid: boolean;
   )
 }
 
+/**
+ * How to build an edge that needs more than one belt or pipe: which machines
+ * of each end go on which belt, and the counts on other tiers.
+ */
+function HowToBuild({ edge, r, result, catalog }: { edge: PlanEdge; r: EdgeResult; result: SolveResult; catalog: Catalog }) {
+  const item = catalog.items.get(edge.item)
+  const fluid = !!item && item.form !== 'solid'
+  const kind = fluid ? 'pipe' : 'belt'
+  const unit = fluid ? ' m³' : ''
+  const tier = r.belts && catalog.transportTiers.get(r.belts.tier)
+  if (!tier || !r.belts || r.belts.count <= 1) return null
+  const from = groupEnd(result.nodes.get(edge.source), edge.item, 'out')
+  const to = groupEnd(result.nodes.get(edge.target), edge.item, 'in')
+  const belts = beltPlan(r.perMin, tier.ratePerMin, from, to)
+  if (!belts) return null
+
+  // Identical belts share a row: "2× 1,000/min".
+  const rows: { n: number; perMin: number; from?: number; to?: number }[] = []
+  const same = (a?: number, b?: number) => (a === undefined ? b === undefined : b !== undefined && Math.abs(a - b) < 1e-6)
+  for (const b of belts) {
+    const last = rows[rows.length - 1]
+    if (last && same(last.perMin, b.perMin) && same(last.from, b.from) && same(last.to, b.to)) last.n++
+    else rows.push({ n: 1, ...b })
+  }
+  const others = transportOptions(r.perMin, [...catalog.transportTiers.values()].filter((t) => t.kind === tier.kind), Math.max(from?.each ?? 0, to?.each ?? 0))
+    .filter((o) => o.tier.id !== tier.id)
+    .slice(0, 3)
+  const machine = (end?: GroupEnd) => end && catalog.machines.get(end.machine)
+  // Consumers that don't divide into whole machines per belt: each belt's last runs part-time.
+  const split = (end: GroupEnd | undefined, key: 'from' | 'to') => {
+    if (!end) return undefined
+    const counts = belts.map((b) => b[key] ?? 0)
+    const separate = counts.reduce((s, c) => s + Math.ceil(c - 1e-6), 0)
+    const shared = Math.ceil(counts.reduce((s, c) => s + c, 0) - 1e-6)
+    return separate > shared ? { name: machine(end)?.name ?? 'machine', separate, shared } : undefined
+  }
+  const uneven = split(from, 'from') ?? split(to, 'to')
+
+  return (
+    <Field
+      label="How to build"
+      hint={
+        <>
+          {uneven &&
+            `Kept apart, the ${kind}s need ${uneven.separate} ${uneven.name}s instead of ${uneven.shared}: the last one on each ${kind} runs part-time. `}
+          {others.length > 0 && `Or ${others.map((o) => `${o.count}× ${tierName(o.tier)}`).join(' · ')}.`}
+        </>
+      }
+    >
+      <table className="pn-belt-plan">
+        <thead>
+          <tr>
+            <th>{kind === 'pipe' ? 'Pipes' : 'Belts'}</th>
+            <th>{unit ? 'm³/min' : '/min'}</th>
+            {from && <th title={`Machines feeding each ${kind}`}>{machine(from)?.name ?? 'From'}</th>}
+            {to && <th title={`Machines fed by each ${kind}`}>{machine(to)?.name ?? 'To'}</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i}>
+              <td>{row.n}×</td>
+              <td>{fmt(row.perMin)}</td>
+              {from && <td>{fmt(row.from ?? 0)}</td>}
+              {to && <td>{fmt(row.to ?? 0)}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Field>
+  )
+}
+
 function EdgeInspector({
   edge,
   plan,
@@ -738,6 +815,7 @@ function EdgeInspector({
         </div>
         {r && <BeltCount r={r} fluid={!!item && item.form !== 'solid'} plan={plan} catalog={catalog} />}
       </div>
+      {r && <HowToBuild edge={edge} r={r} result={result} catalog={catalog} />}
       {siblings.length > 1 && (
         <Field label="Share of demand" hint={`${siblings.length} belts feed this input; demand is split by share.`}>
           <NumberField value={edge.share ?? 1} min={0} step={1} width={80} onChange={(share) => actions.updateEdge(edge.id, { share })} />

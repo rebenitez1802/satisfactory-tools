@@ -5,7 +5,7 @@
 // from a deeper layer to a shallower one.
 //
 // Two ranks are pinned so the input and outputs are visually isolated:
-//   - the source sits alone in rank 0 (it is the only node with no inputs);
+//   - the sources sit alone in rank 0 (they are the only nodes with no inputs);
 //   - every sink is pushed to one shared final rank, aligned together, even if
 //     some outputs could be tapped earlier.
 // `direction` controls whether ranks run left-to-right or bottom-to-top.
@@ -73,18 +73,46 @@ export function layoutGraph(graph: Graph, direction: Direction = 'LR'): Map<stri
     byRank.get(r)!.push(n.id)
   }
 
+  // Minor-axis offset per node. One input: every rank centered. Several
+  // inputs: each later rank sits under the nodes that feed it (the mean of
+  // their offsets), pushed apart just enough to keep the gap, so merger trees
+  // stand over the inputs they collect instead of belts crossing the graph.
+  const minor = new Map<string, number>()
+  const sources = graph.nodes.filter((n) => n.kind === 'source').length
+  const preds = new Map<string, string[]>(graph.nodes.map((n) => [n.id, []]))
+  for (const e of forward) preds.get(e.target)!.push(e.source)
+  const ranks = [...byRank.keys()].sort((a, b) => a - b)
+  for (const r of ranks) {
+    let ids = byRank.get(r)!
+    if (sources > 1 && r > 0) {
+      const want = new Map(
+        ids.map((id) => {
+          const from = preds.get(id)!.filter((p) => minor.has(p))
+          return [id, from.length ? from.reduce((s, p) => s + minor.get(p)!, 0) / from.length : 0] as const
+        }),
+      )
+      ids = [...ids].sort((a, b) => want.get(a)! - want.get(b)!)
+      const at = ids.map((id) => want.get(id)!)
+      for (let i = 1; i < at.length; i++) at[i] = Math.max(at[i], at[i - 1] + MINOR_GAP)
+      // Pushing only goes right; shift back so the rank keeps its mean.
+      const drift = at.reduce((s, x, i) => s + x - want.get(ids[i])!, 0) / at.length
+      ids.forEach((id, i) => minor.set(id, at[i] - drift))
+    } else {
+      const span = (ids.length - 1) * MINOR_GAP
+      ids.forEach((id, i) => minor.set(id, i * MINOR_GAP - span / 2))
+    }
+  }
+
   const pos = new Map<string, Positioned>()
   for (const [r, ids] of byRank) {
-    const span = (ids.length - 1) * MINOR_GAP
-    ids.forEach((id, i) => {
-      const minor = i * MINOR_GAP - span / 2
+    for (const id of ids) {
       const major = r * MAJOR_GAP[direction]
       // Bottom-to-top: the source (rank 0) sits at the bottom, so higher ranks
       // move up the screen (negative y, since React Flow's y grows downward).
-      const x = direction === 'BT' ? minor : major
-      const y = direction === 'BT' ? -major : minor
+      const x = direction === 'BT' ? minor.get(id)! : major
+      const y = direction === 'BT' ? -major : minor.get(id)!
       pos.set(id, { id, rank: r, x, y })
-    })
+    }
   }
   return pos
 }

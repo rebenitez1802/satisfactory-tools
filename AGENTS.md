@@ -27,7 +27,8 @@ browser.
 
 **Load Balancer:** given an input belt rate and a list of desired output rates,
 build a graph of splitters (1 → 2 or 3, even split) and mergers (≤3 → 1) that
-divides the input exactly. Ratios that aren't made of halves and thirds use
+divides the input exactly. It can also take several input belts (one per
+machine), packed whole into the outputs. Ratios that aren't made of halves and thirds use
 feedback loops, as real in-game "odd" balancers do. If the outputs add up to
 less than the input, the remainder goes to an auto-added red **Leftover**
 output. Every generated graph is checked by a flow simulator before it is shown.
@@ -45,14 +46,16 @@ resources by how many nodes the map has, and previews the change. A plan
 can list resources not to use ("build this without oil"), which ✨ Optimize
 and ⚡ Build chain both follow. Game progress (HUB tier and MAM research) and
 per-recipe locks decide which recipes are offered at all. Splits
-open a read-only load balancer. A build checklist (✓ on each card) and the
+open a read-only load balancer fed by one input per machine, and the belt
+inspector says how to put a flow on several belts. A build checklist (✓ on each card) and the
 build cost help while building the plan in the game. Plans live in tabs and autosave to
 localStorage. Game data comes from **mod-ready data packs** (see "Production
 chains" below).
 
 Tools are hash-routed (`#/planner`, `#/balancer`, see `src/useHashRoute.ts`).
 The balancer can be opened with rates prefilled:
-`#/balancer?in=120&out=90|Iron Plate&out=30|Iron Rod`.
+`#/balancer?in=120&out=90|Iron Plate&out=30|Iron Rod`, or with several
+inputs and a belt cap: `#/balancer?in=20x100&out=1200&out=800&cap=1200`.
 
 ## Tech stack
 
@@ -136,7 +139,8 @@ src/
                             layout.ts (Tidy, dagre), autobuild.ts (⚡ Build chain),
                             buildcost.ts (build checklist, build cost), optimize.ts (✨ Optimize)
                             on lp.ts (simplex), world.ts (world node counts and caps),
-                            progress.ts (game progress, which recipes are usable)
+                            progress.ts (game progress, which recipes are usable),
+                            belts.ts (machines onto belts: belt inspector, balancer inputs)
   components/planner/       Planner UI: PlannerTool (state, tabs, history), PlanCanvas (React Flow),
                             nodes.tsx (cards), Inspector, Picker, RecipeSelect, BalancerPopup,
                             OptimizeModal, WorldModal, RecipesModal, AvoidChips, planner.css
@@ -151,6 +155,7 @@ src/
     types.ts                Graph model: GNode (source|sink|splitter|merger), GEdge, SolveInput/Result
     ratios.ts               rates → coprime integer ratios (handles decimals like 12.5)
     builder.ts              Recursive divide-and-partition balancer construction (3-smooth B, loopbacks)
+    multi.ts                Several inputs: pack whole inputs into outputs, split only the straddlers
     simulate.ts             Fixed-point steady-state flow simulator (the correctness check)
     solve.ts                Entry point: validate → leftover → reduce → build → simulate → warnings
     layout.ts               Longest-path layering; 'LR' or 'BT' (BT is the UI default)
@@ -170,6 +175,9 @@ checks that every sink gets its target rate, or `solve` returns `ok: false` →
 - `SolveResult.warnings` covers: leftover, loopbacks used (info), and belts over
   the chosen belt tier's limit (`beltMax`; internal belts can carry more than
   the input when there are loops).
+- With `SolveInput.inputs` (more than one), `solve` hands off to `solveMulti`:
+  several `source` nodes, each with its own `rate`. Layout then places each
+  rank under the nodes feeding it; a single input keeps centered ranks.
 
 ## Conventions and style
 
