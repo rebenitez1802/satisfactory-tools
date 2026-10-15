@@ -476,10 +476,20 @@ byproducts (a recipe's second output, or all of a generator's outputs).
   satellites the plan's extractors use against what the map has (hover for
   each purity), in red with a note when there are more than exist. A
   ⛔ limited group counts the sites it lists; a flexible one the extractors
-  it needs, whole, on its purity. Water Extractors aren't counted. The
-  counts are the default map's (from the wiki), or the plan's own, edited
-  under Settings → World nodes (1.2's World Randomization moves nodes);
-  *Reset* goes back to the map's. ✨ Optimize never plans past them.
+  it needs, whole, on its purity. Counts are per purity: 36 pure Nitrogen
+  Gas satellites don't make room for 15 normal ones, and the note says so
+  ("Nitrogen Gas: 15 normal well satellites, the map has 7"). Water
+  Extractors aren't counted. The counts are the default map's (from the
+  wiki), or the plan's own, edited under Settings → World nodes (1.2's World
+  Randomization moves nodes); *Reset* goes back to the map's.
+- ✨ Optimize never plans past them. Flexible extractor groups (kept or new)
+  share the sites ⛔ limited groups don't list. Then each group that needs
+  more sites of its purity than the map has moves, biggest first, to the
+  best purity with room for it at its clock (15 normal nitrogen satellites
+  become 8 pure ones). If no single purity holds it, it becomes a ⛔ limited
+  group on the best sites left, mixed purities, clocked to give just its
+  rate (overclocked only when it needs every site). A group the whole map
+  can't hold (a target past the map) stays as it is.
 - **Don't use** (Settings, and the ✨ Optimize dialog): raw resources this
   plan shouldn't mine anew ("build this without oil"), saved with the plan
   (`PlanSettings.avoid`). ✨ Optimize and ⚡ Build chain both follow it (see

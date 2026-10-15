@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { RecipeId } from '../../catalog'
 import { optimize, resourceWeights, type OptimizeOptions } from '../optimize'
 import { solvePlan } from '../solve'
-import { defaultSites } from '../world'
+import { defaultSites, worldUsage } from '../world'
 import type { Plan } from '../types'
 import { catalog, extractorNode, goalNode, plan, recipe, recipeNode, supplyNode } from './fixtures'
 
@@ -237,6 +237,34 @@ describe('optimize', () => {
       world: [{ resource: 'base:Desc_OreUranium_C', site: 'node', purity: 'base:pure', count: 3 }],
     })
     expect(custom.scale).toBeCloseTo(1)
+  })
+
+  it('shares the map\'s sites between flexible groups and what ⛔ groups list', () => {
+    // 2 pure iron nodes: 2400/min at most (a Mk.3 at 250% fills a Mk.6 belt).
+    const world = [{ resource: 'base:Desc_OreIron_C', site: 'node', purity: 'base:pure', count: 2 }]
+    const miner = (id: string, o = {}) => extractorNode(id, 'Build_MinerMk3_C', 'Desc_OreIron_C', [{ purity: 'base:pure', count: 1 }], o)
+    const p = (nodes: Parameters<typeof plan>[0]) =>
+      plan([...nodes, goalNode('g', 'Desc_OreIron_C', 4000)], nodes.map((n) => [n.id, 'g', 'Desc_OreIron_C'] as [string, string, string]), {
+        settings: { machineMode: 'fractional', world },
+      })
+    // Two flexible groups get 2400 between them, not 2400 each.
+    expect(run(p([miner('a'), miner('b')]), { world }).scale).toBeCloseTo(0.6)
+    // A ⛔ group on one pure node (480/min) leaves the other to the flexible one.
+    expect(run(p([miner('a', { limited: true }), miner('b')]), { world }).scale).toBeCloseTo((480 + 1200) / 4000)
+  })
+
+  it('puts flexible extractors on purities the map has', () => {
+    // 900 m³/min of Nitrogen Gas: 15 normal satellites, but the map has 7
+    // normal ones and 36 pure: 8 pure ones (120 m³/min each) instead.
+    const r = run(
+      plan(
+        [extractorNode('n', 'Build_FrackingExtractor_C', 'Desc_NitrogenGas_C', [{ purity: 'base:normal', count: 1 }]), goalNode('g', 'Desc_NitrogenGas_C', 900)],
+        [['n', 'g', 'Desc_NitrogenGas_C']],
+      ),
+    )
+    const n = r.plan.nodes.find((x) => x.id === 'n')!
+    expect(n.kind === 'extractor' && n.sites).toEqual([{ purity: 'base:pure', count: 1 }])
+    expect(worldUsage(r.plan, r.solved, catalog)).toEqual([expect.objectContaining({ used: 8, over: false })])
   })
 })
 

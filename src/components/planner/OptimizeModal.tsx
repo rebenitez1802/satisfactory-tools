@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, type ReactNode } from 'react'
 import type { Catalog, ItemId } from '../../catalog'
-import { newNodeId, optimize, solvePlan, worldUsage } from '../../planner'
+import { newNodeId, optimize, overText, solvePlan, worldUsage } from '../../planner'
 import type { Objective, Plan, SolveResult } from '../../planner'
 import { AvoidChips } from './AvoidChips'
 import { fmt, mw } from './format'
@@ -183,7 +183,7 @@ function Comparison({
         <div className="warnings">
           {over.map((u) => (
             <div key={u.resource + u.site} className="warning error">
-              Uses {u.used} {catalog.items.get(u.resource)?.name} {u.site === 'well' ? 'well satellites' : 'nodes'}; the map has {u.available}.
+              More than the map has. {overText(u, catalog)}.
             </div>
           ))}
           {warnings.map((d, i) => (

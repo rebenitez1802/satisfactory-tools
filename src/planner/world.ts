@@ -13,11 +13,14 @@
 //   or pipe. Iron: 39 impure × 300 + 42 normal × 600 + 46 pure × 1200 = 92100
 //   a minute, the wiki's figure. The optimizer caps new extraction with it
 //   and weighs resources by it.
+// - Counts are per purity: 36 pure Nitrogen Gas satellites don't make room
+//   for 15 normal ones. `fitSites` moves the optimizer's flexible groups onto
+//   purities the map has.
 
 import type { Catalog, ItemId, Machine, PurityId, WorldSite } from '../catalog'
-import { maxClock } from './rates'
+import { extractorRate, maxClock } from './rates'
 import type { SolveResult } from './solve'
-import type { Plan } from './types'
+import type { ExtractorNode, Plan, PlanNode } from './types'
 
 const EPS = 1e-6
 
@@ -117,4 +120,73 @@ export function worldUsage(plan: Plan, result: SolveResult, catalog: Catalog): W
       over: purities.some((p) => p.used > p.available),
     }
   })
+}
+
+/** What's over, per purity: "Nitrogen Gas: 15 normal well satellites, the map has 7". */
+export function overText(u: WorldUse, catalog: Catalog): string {
+  const kind = u.site === 'well' ? 'well satellites' : 'nodes'
+  const parts = u.purities
+    .filter((p) => p.used > p.available)
+    .map((p) => `${p.used} ${(catalog.purities.get(p.purity)?.name ?? p.purity).toLowerCase()} ${kind}, the map has ${p.available}`)
+  return `${catalog.items.get(u.resource)?.name ?? u.resource}: ${parts.join('; ')}`
+}
+
+/**
+ * Flexible extractor groups moved onto sites the map has, for each resource
+ * whose groups use more sites of some purity than exist. ⛔ limited groups
+ * keep their sites; the flexible ones, biggest first, each take:
+ *
+ * 1. the best purity with room for the whole group at its clock, or else
+ * 2. the best sites left, as a ⛔ limited group of mixed purities clocked to
+ *    give just its rate (overclocked only when every site left is needed).
+ *
+ * A group that doesn't fit even so is left as it is, still over.
+ */
+export function fitSites(plan: Plan, catalog: Catalog, result: SolveResult): Plan {
+  const sites = worldSites(plan, catalog)
+  const over = worldUsage(plan, result, catalog).filter((u) => u.over)
+  if (!over.length) return plan
+  const best = [...catalog.purities.values()].sort((a, b) => b.multiplier - a.multiplier).map((p) => p.id)
+  const changed = new Map<string, PlanNode>()
+  for (const u of over) {
+    const ofIt = plan.nodes.filter(
+      (n): n is ExtractorNode => n.kind === 'extractor' && n.resource === u.resource && catalog.machines.get(n.machine)?.extraction?.site === u.site,
+    )
+    const free = new Map(best.map((p) => [p, sites.filter((s) => s.resource === u.resource && s.site === u.site && s.purity === p).reduce((n, s) => n + s.count, 0)]))
+    for (const n of ofIt) if (n.limited) for (const s of n.sites) free.set(s.purity, Math.max(0, (free.get(s.purity) ?? 0) - s.count))
+    const flexible = ofIt
+      .filter((n) => !n.limited)
+      .map((n) => ({ n, rate: result.nodes.get(n.id)?.activity ?? 0 }))
+      .filter((g) => g.rate > EPS)
+      .sort((a, b) => b.rate - a.rate)
+    for (const { n, rate } of flexible) {
+      const machine = catalog.machines.get(n.machine)!
+      const perSite = (purity: PurityId) => extractorRate(machine, { sites: [{ purity, count: 1 }], clock: 1, sloops: n.sloops }, catalog.purities)
+      const whole = best.find((p) => perSite(p) > 0 && Math.ceil(rate / (perSite(p) * n.clock) - EPS) <= free.get(p)!)
+      if (whole) {
+        free.set(whole, free.get(whole)! - Math.ceil(rate / (perSite(whole) * n.clock) - EPS))
+        changed.set(n.id, { ...n, sites: [{ purity: whole, count: 1 }] })
+        continue
+      }
+      // Best sites first, until they give the rate at 100%.
+      const taken: ExtractorNode['sites'] = []
+      let full = 0
+      for (const p of best) {
+        let count = 0
+        while (count < free.get(p)! && full < rate - EPS) {
+          count++
+          full += perSite(p)
+        }
+        if (count) taken.push({ purity: p, count })
+      }
+      // A hair over the rate, so the ⛔ limit never scales the plan down;
+      // up to the highest clock, for a plan that needs every site at it.
+      const need = full > 0 ? rate / full : Infinity
+      if (need > maxClock(machine) * (1 + 1e-6)) continue
+      const clock = Math.min(need * (1 + 1e-7), maxClock(machine))
+      for (const s of taken) free.set(s.purity, free.get(s.purity)! - s.count)
+      changed.set(n.id, { ...n, limited: true, sites: taken, clock })
+    }
+  }
+  return changed.size ? { ...plan, nodes: plan.nodes.map((n) => changed.get(n.id) ?? n) } : plan
 }
