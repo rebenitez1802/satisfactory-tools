@@ -207,6 +207,17 @@ byproducts (a recipe's second output, or all of a generator's outputs).
   edge says how many belts or pipes of it the flow needs: an edge joins two
   machine groups, so 240/min on Mk.2 is "2× Mk.2" under the rate, not an
   error. The belt inspector shows the count too.
+  - When the edge needs more than one belt or pipe, the inspector says
+    **how to build** it (`beltPlan` in `src/planner/belts.ts`): one row
+    per belt with its rate, the producing machines on it and the consuming
+    machines it feeds. Machines go onto belts whole and as evenly as they
+    can, from whichever end needs fewer belts (producers on a tie), so 20
+    Smelters at 30/min on Mk.4 are 2 belts of 10. A partly clocked machine
+    rides on the lightest belt. The other end gets what each belt brings,
+    which can be part of a machine; when that adds machines, a hint says
+    so. An edge from a split or into a merge holds `perMin / each`
+    machines' worth of its group. The counts on up to three other tiers
+    follow ("Or 1× Mk.6 · 2× Mk.5").
   - The count assumes the flow can be shared out over the belts, which only
     works if **every machine fits on one belt**: a machine puts out (or
     takes in) an item through one port, so one belt. When one machine at
@@ -220,6 +231,13 @@ byproducts (a recipe's second output, or all of a generator's outputs).
   badge. Clicking it opens a read-only load-balancer popup for those rates, with
   surplus as the leftover output, plus "Open in Load Balancer". Inputs fed by
   several edges get a merger badge.
+  - The producing group is many machines, so the balancer has **one input
+    per machine** (7.5 machines are 7 inputs plus one at half rate). Whole
+    machines go straight to an output, so this needs the fewest splitters.
+    A toggle groups the machines onto the fewest belts of the plan's tier
+    instead. With a tier set, it is the balancer's belt cap: an output above
+    it leaves on several belts. The link carries the inputs (`in=30x30`)
+    and the cap.
 - **Summary:** total MW (power used; with generators, also power made and
   the net), buildings by type, shards and Somersloops, raw resources, net
   outputs, surplus, missing inputs, bottlenecks, then the build checklist's

@@ -2,7 +2,7 @@
 //
 // Every splitter divides its total inflow evenly across its outgoing belts and
 // every merger sums its inflows, so the whole network is a linear system driven
-// by the source. Because any cycle must pass through at least one splitter that
+// by the sources. Because any cycle must pass through at least one splitter that
 // only sends a fraction of its inflow around the loop, every loop has gain < 1
 // and simple fixed-point iteration converges geometrically. We iterate edge
 // flows until they stop changing, which doubles as a verifier for loop designs.
@@ -53,9 +53,9 @@ export function simulate(
 
       let outPerEdge: number
       if (kind === 'source') {
-        // The source injects the fixed input rate, divided across its belts
-        // (normally exactly one).
-        outPerEdge = outs.length ? inputRate / outs.length : 0
+        // The source injects its own rate (or the input rate), divided
+        // across its belts (normally exactly one).
+        outPerEdge = outs.length ? (n.rate ?? inputRate) / outs.length : 0
       } else if (kind === 'sink') {
         continue // sinks have no outgoing belts
       } else {

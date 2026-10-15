@@ -627,3 +627,15 @@ select:focus {
 .app-footer a {
   color: inherit;
 }
+
+/* Several inputs: count × rate rows. */
+.input-row {
+  display: grid;
+  grid-template-columns: 70px auto 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+.input-times {
+  color: var(--text-dim);
+  font-size: 13px;
+}

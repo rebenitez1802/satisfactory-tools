@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { reduceRatios, gcd } from '../ratios'
 import { smooth3AtLeast, factorizeSmooth, buildBalancer } from '../builder'
 import { simulate } from '../simulate'
+import { pack } from '../multi'
 import { solve } from '../solve'
 import type { Graph } from '../types'
 
@@ -199,5 +200,98 @@ describe('simple ratios', () => {
     expect(rounded.ok).toBe(true)
     expect(rounded.N).toBe(3)
     expect(rounded.warnings.some((w) => w.message.includes('2 : 1'))).toBe(true)
+  })
+})
+
+describe('several inputs', () => {
+  /** Solve, check structure, and simulate: every output must get its rate. */
+  function check(inputs: number[], outs: number[], beltMax?: number) {
+    const res = solve({ input: 0, inputs, outputs: outs.map((rate) => ({ rate })), beltMax })
+    expect(res.error).toBeUndefined()
+    expect(res.ok).toBe(true)
+    const graph = res.graph!
+    assertStructure(graph)
+    expect(graph.nodes.filter((n) => n.kind === 'source')).toHaveLength(inputs.length)
+    const sim = simulate(graph, 0)
+    expect(sim.converged).toBe(true)
+    const sinks = graph.nodes.filter((n) => n.kind === 'sink')
+    for (const s of sinks) expect(sim.nodeInflow.get(s.id)!).toBeCloseTo(s.target!, 5)
+    return { res, graph, sinks, sim }
+  }
+  const count = (graph: Graph, kind: string) => graph.nodes.filter((n) => n.kind === kind).length
+
+  it('20 machines at 100/min into 1200 / 800 on Mk.6: no splitter, no belt over 1200', () => {
+    const { res, graph, sinks } = check(new Array(20).fill(100), [1200, 800], 1200)
+    expect(count(graph, 'splitter')).toBe(0)
+    expect(sinks.map((s) => s.target)).toEqual([1200, 800])
+    expect(Math.max(...graph.edges.map((e) => e.flow!))).toBeLessThanOrEqual(1200 + 1e-6)
+    expect(res.inputs).toEqual({ count: 20, split: 0 })
+    expect(res.warnings.filter((w) => w.kind === 'belt-over-capacity')).toHaveLength(0)
+  })
+
+  it('splits only the input that straddles two outputs', () => {
+    const { res, graph } = check(new Array(20).fill(100), [1150, 850], 1200)
+    expect(res.inputs?.split).toBe(1)
+    expect(count(graph, 'splitter')).toBe(1)
+  })
+
+  it('a partial machine: 7 × 100 + 50 into 400 / 350', () => {
+    const { res, graph } = check([...new Array(7).fill(100), 50], [400, 350])
+    expect(res.inputs?.split).toBe(0)
+    expect(count(graph, 'splitter')).toBe(0)
+  })
+
+  it('outputs above the cap leave on several belts', () => {
+    const { res, sinks, graph } = check(new Array(20).fill(100), [1500, 500], 1200)
+    expect(sinks.map((s) => s.target)).toEqual([750, 750, 500])
+    expect(sinks[0].label).toContain('1/2')
+    expect(Math.max(...graph.edges.map((e) => e.flow!))).toBeLessThanOrEqual(1200 + 1e-6)
+    expect(res.warnings.some((w) => w.kind === 'info' && w.message.includes('2 belts'))).toBe(true)
+  })
+
+  it('the remainder goes to a Leftover output', () => {
+    const { res, sinks } = check([250, 250, 250], [300, 200])
+    expect(res.leftover).toBeCloseTo(250, 6)
+    expect(sinks.filter((s) => s.leftover)).toHaveLength(1)
+  })
+
+  it('uneven inputs and awkward ratios still simulate exactly', () => {
+    check([142.857142, 142.857142, 142.857142, 142.857142, 142.857142, 142.857142, 142.857148], [600, 400])
+    check([60, 45, 30, 37.5], [52.5, 70, 50])
+    check([120, 120, 120], [100, 100, 100, 60])
+    check([2000 / 14, 2000 / 14, 2000 / 14, 2000 / 14, 2000 / 14, 2000 / 14, 2000 / 14, 2000 / 14, 2000 / 14, 2000 / 14, 2000 / 14, 2000 / 14, 2000 / 14, 2000 / 14], [1200, 800], 1200)
+  })
+
+  it('a single input in `inputs` still uses the single-input builder', () => {
+    const res = solve({ input: 120, inputs: [120], outputs: [{ rate: 60 }, { rate: 60 }] })
+    expect(res.ok).toBe(true)
+    expect(res.N).toBe(2)
+  })
+
+  it('rejects outputs above the inputs, and bad rates', () => {
+    expect(solve({ input: 0, inputs: [100, 100], outputs: [{ rate: 250 }] }).ok).toBe(false)
+    expect(solve({ input: 0, inputs: [100, 0], outputs: [{ rate: 50 }] }).ok).toBe(false)
+  })
+
+  it('flags an input that is already over the cap', () => {
+    const { res } = check([300, 300], [400, 200], 270)
+    expect(res.warnings.some((w) => w.kind === 'belt-over-capacity')).toBe(true)
+  })
+})
+
+describe('pack', () => {
+  it('assigns whole inputs first and cuts as few as it can', () => {
+    const pieces = pack([60, 50, 50, 40], [100, 100])
+    expect(pieces).toHaveLength(4)
+    const cut = new Set(pieces.map((p) => p.input))
+    expect(cut.size).toBe(4)
+  })
+
+  it('every input and output adds up', () => {
+    const inputs = [37, 81, 12.5, 99, 45]
+    const outputs = [100, 70, 104.5]
+    const pieces = pack(inputs, outputs)
+    inputs.forEach((r, i) => expect(pieces.filter((p) => p.input === i).reduce((s, p) => s + p.rate, 0)).toBeCloseTo(r, 9))
+    outputs.forEach((r, j) => expect(pieces.filter((p) => p.output === j).reduce((s, p) => s + p.rate, 0)).toBeCloseTo(r, 9))
   })
 })
