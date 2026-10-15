@@ -10,7 +10,9 @@
 //   what the kept sources don't cover.
 // - A raw resource the plan already has an extractor or supply for comes
 //   only from those, as ⚡ Build chain reuses them. Otherwise new extractors
-//   may take up to what the map's sites give (world.ts).
+//   may take up to what the map's sites give (world.ts). Flexible groups
+//   share the sites ⛔ limited ones don't list; the program counts them in
+//   total, and `fitSites` then puts each group on purities the map has.
 // - Resources the plan avoids (`PlanSettings.avoid`) get no new extractor
 //   and no import, so they come only from the plan's own sources. A goal
 //   that can't be made without one is reported ("Plastic needs Crude Oil")
@@ -51,7 +53,7 @@ import { solveLp, type LpConstraint, type LpProblem } from './lp'
 import { basePowerMw, extractorRate, generatedMw, machinePowerMw, outputMultiplier } from './rates'
 import { shortfall, solvePlan } from './solve'
 import type { Plan, PlanEdge, PlanNode } from './types'
-import { worldCapacity, worldSites } from './world'
+import { fitSites, worldCapacity, worldSites } from './world'
 
 export type Objective = 'resources' | 'power' | 'buildings'
 
@@ -101,8 +103,8 @@ interface Column {
   byproducts: Set<ItemId>
   /** Upper bound from a limit. */
   cap?: number
-  /** Upper bound from the map's sites. */
-  worldCap?: number
+  /** Map sites it takes (`resource` and kind of site): every column on them shares their cap. */
+  world?: string
   /** Goals and generators with a power target: a fixed activity, or Max. */
   anchor?: number | 'max'
   /** Generators: MW per unit of activity. */
@@ -219,14 +221,31 @@ export function optimize(plan: Plan, catalog: Catalog, opts: OptimizeOptions): O
   // Kept nodes, and the recipes the program may use.
   const removed = plan.nodes.filter((n) => replaceable(n, catalog)).map((n) => n.id)
   const gone = new Set(removed)
+  // Flexible extractor groups grow as needed, but together only onto the
+  // sites the map has, less those ⛔ limited groups list.
+  const worldCaps = new Map<string, number>()
+  const onSites = (resource: ItemId, site: string | undefined) => {
+    if (!site || !sites.length) return undefined
+    const key = `${resource}\u0000${site}`
+    if (!worldCaps.has(key)) {
+      const taken = plan.nodes.flatMap((n) =>
+        n.kind === 'extractor' && n.limited && n.resource === resource && catalog.machines.get(n.machine)?.extraction?.site === site ? n.sites : [],
+      )
+      const left = sites.map((s) =>
+        s.resource === resource && s.site === site
+          ? { ...s, count: Math.max(0, s.count - taken.filter((t) => t.purity === s.purity).reduce((n, t) => n + t.count, 0)) }
+          : s,
+      )
+      worldCaps.set(key, worldCapacity(catalog, left, resource, site) ?? Infinity)
+    }
+    return key
+  }
   const kept: Column[] = []
   for (const n of plan.nodes) {
     if (gone.has(n.id)) continue
     const c = keptColumn(n, catalog, weight)
     if (!c) continue
-    // A flexible extractor group grows as needed, but only onto the sites the map has.
-    const site = n.kind === 'extractor' && !n.limited ? catalog.machines.get(n.machine)?.extraction?.site : undefined
-    if (n.kind === 'extractor' && site && sites.length) c.worldCap = worldCapacity(catalog, sites, n.resource, site)
+    if (n.kind === 'extractor' && !n.limited) c.world = onSites(n.resource, catalog.machines.get(n.machine)?.extraction?.site)
     kept.push(c)
   }
   if (!kept.some((c) => c.anchor !== undefined)) {
@@ -289,7 +308,7 @@ export function optimize(plan: Plan, catalog: Catalog, opts: OptimizeOptions): O
         inputs: new Map(),
         outputs: new Map([[item, 1]]),
         byproducts: new Set(),
-        worldCap: site && sites.length ? worldCapacity(catalog, sites, item, site) : undefined,
+        world: onSites(item, site),
         cost: extractionCost(catalog, weight(item), machine, machine.extraction!.ratePerMin),
       })
     } else if (!made.has(item)) {
@@ -346,8 +365,13 @@ export function optimize(plan: Plan, catalog: Catalog, opts: OptimizeOptions): O
     }
     columns.forEach((c, j) => {
       if (c.cap !== undefined) constraints.push({ terms: [[j, 1]], op: '<=', rhs: c.cap })
-      if (o.world && c.worldCap !== undefined) constraints.push({ terms: [[j, 1]], op: '<=', rhs: c.worldCap })
     })
+    if (o.world) {
+      for (const [key, cap] of worldCaps) {
+        const terms = columns.flatMap((c, j): [number, number][] => (c.world === key ? [[j, 1]] : []))
+        if (terms.length && cap < Infinity) constraints.push({ terms, op: '<=', rhs: cap })
+      }
+    }
     for (const { c, j } of targets) {
       const a = c.anchor as number
       if (o.scale === 'var') constraints.push({ terms: [[j, 1], [extra, -a]], op: '=', rhs: 0 })
@@ -441,7 +465,9 @@ export function optimize(plan: Plan, catalog: Catalog, opts: OptimizeOptions): O
     newId: opts.newId,
     isRecipeHidden: opts.isRecipeHidden,
   })
-  built.plan = topped.plan
+  // Flexible extractors on purities the map has (the program only counted
+  // the sites' total).
+  built.plan = fitSites(topped.plan, catalog, solvePlan(topped.plan, catalog))
   built.added.push(...extraGroups, ...topped.added)
   // Items the game makes, but not with any recipe the player can use yet.
   const imported = built.plan.nodes.flatMap((n) =>

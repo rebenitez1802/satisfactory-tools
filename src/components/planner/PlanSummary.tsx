@@ -1,5 +1,5 @@
 import type { Catalog, ItemId } from '../../catalog'
-import { buildCost, worldUsage } from '../../planner'
+import { buildCost, overText, worldUsage } from '../../planner'
 import type { ItemRate, MachineMode, Plan, PlanSettings, SolveResult } from '../../planner'
 import { AvoidChips } from './AvoidChips'
 import { fmt, mw, pct, tierName } from './format'
@@ -345,7 +345,8 @@ function WorldSection({ plan, result, catalog }: { plan: Plan; result: SolveResu
       })}
       {use.some((u) => u.over) && (
         <div className="pn-note pn-bad">
-          More nodes than the map has: {use.filter((u) => u.over).map((u) => catalog.items.get(u.resource)?.name ?? u.resource).join(', ')}. Hover a count for each purity.
+          More nodes than the map has. {use.filter((u) => u.over).map((u) => overText(u, catalog)).join('. ')}. Pick another purity on the extractor, or ⛔ limit it to the
+          sites you have.
         </div>
       )}
     </Section>
