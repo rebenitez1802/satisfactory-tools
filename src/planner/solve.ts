@@ -87,6 +87,17 @@ export function shortfall(port: InputPort): number {
  */
 const SHORT_TOL = 1e-6
 
+/**
+ * What an output has left over, its belts' use aside (or a source's
+ * `capacity`, when that's more). Rounding crumbs from loops count as 0, so
+ * the card, the totals and the waste warning agree.
+ */
+export function spare(port: OutputPort, capacity = 0): number {
+  const out = Math.max(port.produced, capacity)
+  const left = out - port.used
+  return left > SHORT_TOL * Math.max(1, out) ? left : 0
+}
+
 export interface OutputPort {
   item: ItemId
   produced: number
@@ -853,11 +864,11 @@ function assemble(
       })
     }
     // Rounding across stages leaves crumbs; only a real share is spare.
-    if (n.kind !== 'goal') for (const p of outputs) if (p.produced - p.used > SHORT_TOL * Math.max(1, p.produced)) add(surplus, p.item, p.produced - p.used)
+    if (n.kind !== 'goal') for (const p of outputs) if (spare(p)) add(surplus, p.item, spare(p))
     for (const p of outputs) {
       const item = catalog.items.get(p.item)
-      const left = p.produced - p.used
-      if (pass.converged && item?.radioactive && !item.sinkPoints && left > EPS * Math.max(1, p.produced)) {
+      const left = spare(p)
+      if (pass.converged && item?.radioactive && !item.sinkPoints && left) {
         diagnostics.push({
           severity: 'warning',
           nodeId: n.id,
@@ -977,7 +988,7 @@ function assemble(
     for (const p of res.outputs) {
       const list = g.out.get(key(n.id, p.item))
       if (list && list.length > 1) {
-        splits.push({ node: n.id, item: p.item, produced: p.produced, edges: flows(list), leftover: Math.max(0, p.produced - p.used) })
+        splits.push({ node: n.id, item: p.item, produced: p.produced, edges: flows(list), leftover: spare(p) })
       }
     }
     for (const p of res.inputs) {
