@@ -70,7 +70,7 @@ and useful straight away while playing. Reorder freely.
 | 6a | Resources to avoid | #22 | Done (PR #19). From the user's testing of #6 (2026-10-14): "build this without oil". Split from 6b on 2026-10-14: it covers the oil case alone and touches Optimize and Build chain, not prefs. |
 | 6b | Game progress | #23, #24 | Done (PR #20). Plan early in the game with only what's unlocked. Together because both reshape the Recipes dialog and prefs (one migration, `lockedAlternates` → `lockedRecipes` plus progress); #23 alone is mostly groundwork for #24. |
 | 7 | Real belts | #19, #18 | Done (PR #21). Both turn one logical flow into belts you can build, and share a helper that puts machines onto belts (`src/planner/belts.ts`). |
-| 7b | Splits as players build them | #27 | Done (PR #22). From the user's testing of #19: balancers for real plan rates were absurd. |
+| 7b | Splits as players build them | #27, #28 | Done (PR #22). From the user's testing of #19: balancers for real plan rates were absurd. #28 (manifold how to build) came from testing #27. |
 | 8 | Use leftovers | #17 | Builds on #2 (adding nodes) and #6 (ranking suggestions). |
 | any time | Small standalones | #9, #15, #14, #26 | Independent; slot one in between the big ones. |
 | later | Solver | #25 | Changes rates, so its own PR. |
