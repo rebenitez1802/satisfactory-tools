@@ -174,6 +174,51 @@ export function duplicateNodes(plan: Plan, ids: Iterable<string>, newId: () => s
   return pasteClip(plan, copyNodes(plan, ids), newId).plan
 }
 
+/**
+ * Why a producer can't be split into one group per consumer of `item`, or
+ * undefined when it can: only plain recipe nodes (not limited, no power
+ * target) whose other outputs have no belts, with two or more belts of `item`.
+ */
+export function splitByConsumerBlocker(plan: Plan, nodeId: string, item: ItemId): string | undefined {
+  const node = plan.nodes.find((n) => n.id === nodeId)
+  if (!node || node.kind !== 'recipe') return 'Only machine groups making a recipe can be split.'
+  if (node.limited) return 'The group is limited (⛔): clear the limit to split it.'
+  if (node.power !== undefined) return 'Generators with a power target can\'t be split.'
+  if (plan.edges.some((e) => e.source === nodeId && e.item !== item)) return 'Its other outputs have belts too.'
+  if (plan.edges.filter((e) => e.source === nodeId && e.item === item).length < 2) return 'It feeds only one belt.'
+  return undefined
+}
+
+/**
+ * Dedicated machines: give each consumer of `item` its own copy of producer
+ * `nodeId`, so nothing has to split that item. The first belt stays on the
+ * node; every other belt moves to a copy stacked below it. Each copy gets the
+ * node's input belts too (its suppliers now feed several groups, which
+ * machines pull from like a manifold). The solver then sizes every group to
+ * its consumer. Returns the plan unchanged when `splitByConsumerBlocker` says no.
+ */
+export function splitByConsumer(plan: Plan, nodeId: string, item: ItemId, newId: () => string, gapY = 200): { plan: Plan; ids: string[] } {
+  if (splitByConsumerBlocker(plan, nodeId, item)) return { plan, ids: [] }
+  const node = plan.nodes.find((n) => n.id === nodeId)!
+  const outs = plan.edges.filter((e) => e.source === nodeId && e.item === item)
+  const ins = plan.edges.filter((e) => e.target === nodeId)
+  const nodes: PlanNode[] = []
+  const edges: PlanEdge[] = []
+  const moved = new Set<string>()
+  outs.slice(1).forEach((out, k) => {
+    const { done: _, ...rest } = node
+    const id = newId()
+    nodes.push({ ...rest, id, position: { x: node.position.x, y: node.position.y + (k + 1) * gapY } })
+    moved.add(out.id)
+    edges.push({ ...out, id: `${id}->${out.target}:${out.item}`, source: id })
+    for (const e of ins) edges.push({ ...e, id: `${e.source}->${id}:${e.item}`, target: id })
+  })
+  return {
+    plan: { ...plan, nodes: [...plan.nodes, ...nodes], edges: [...plan.edges.filter((e) => !moved.has(e.id)), ...edges] },
+    ids: nodes.map((n) => n.id),
+  }
+}
+
 /** The generator a recipe runs in, if it makes power. */
 export function generatorOf(catalog: Catalog, recipe: Recipe): Machine | undefined {
   const machine = catalog.machines.get(recipe.machines[0])

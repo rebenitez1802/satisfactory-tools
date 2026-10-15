@@ -62,6 +62,11 @@ export interface SolveInput {
    * it; with several inputs, outputs above it leave on several belts.
    */
   beltMax?: number
+  /**
+   * How far each output may be from its rate, as a fraction (0.02 = ±2%), to
+   * get a simpler balancer. 0 or unset: exact. See approx.ts.
+   */
+  tolerance?: number
 }
 
 export interface SolveWarning {
@@ -84,6 +89,8 @@ export interface SolveResult {
   loopbacks?: number
   /** Rate routed to the auto-added leftover output (0 when outputs sum to input). */
   leftover?: number
+  /** Set when rates were rounded within the tolerance: the largest relative difference. */
+  approx?: { maxError: number }
   /** Several inputs: how many there are, and how many of them had to be split. */
   inputs?: { count: number; split: number }
   warnings: SolveWarning[]

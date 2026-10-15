@@ -295,3 +295,97 @@ describe('pack', () => {
     outputs.forEach((r, j) => expect(pieces.filter((p) => p.output === j).reduce((s, p) => s + p.rate, 0)).toBeCloseTo(r, 9))
   })
 })
+
+describe('tolerance: rounded ratios', () => {
+  const outs = [92.4, 88.9, 1077.2, 697.5]
+  const size = (r: ReturnType<typeof solve>) => {
+    const g = r.graph!
+    return g.nodes.filter((n) => n.kind === 'splitter' || n.kind === 'merger').length + r.loopbacks!
+  }
+  /** Every output within `tol` of what it asked, checked by simulation. */
+  function within(r: ReturnType<typeof solve>, asked: number[], tol: number, input: number) {
+    expect(r.ok).toBe(true)
+    assertStructure(r.graph!)
+    const sim = simulate(r.graph!, input)
+    const sinks = r.graph!.nodes.filter((n) => n.kind === 'sink' && !n.leftover)
+    expect(sinks).toHaveLength(asked.length)
+    sinks.forEach((s, i) => {
+      const got = sim.nodeInflow.get(s.id)!
+      expect(got).toBeCloseTo(s.target!, 5)
+      expect(Math.abs(got - asked[i]) / asked[i]).toBeLessThanOrEqual(tol + 1e-9)
+    })
+  }
+
+  it('the user case shrinks from a monster to a small balancer', () => {
+    const exact = solve({ input: 1956, outputs: outs.map((rate) => ({ rate })) })
+    for (const tol of [0.01, 0.02, 0.05]) {
+      const r = solve({ input: 1956, outputs: outs.map((rate) => ({ rate })), tolerance: tol })
+      within(r, outs, tol, 1956)
+      expect(size(r)).toBeLessThan(size(exact) / 4)
+      expect(r.approx!.maxError).toBeLessThanOrEqual(tol + 1e-9)
+      expect(r.warnings.some((w) => w.message.startsWith('Rounded to'))).toBe(true)
+    }
+  })
+
+  it('37 / 63 within 2% is 3 : 5', () => {
+    const r = solve({ input: 100, outputs: [{ rate: 37 }, { rate: 63 }], tolerance: 0.02 })
+    expect(r.ratios).toEqual([3, 5])
+    expect(r.loopbacks).toBe(0)
+    expect(r.graph!.nodes.find((n) => n.kind === 'sink')!.label).toBe('37.5 (+1.4%)')
+  })
+
+  it('keeps an exact ratio that is already simple', () => {
+    const r = solve({ input: 120, outputs: [{ rate: 40 }, { rate: 80 }], tolerance: 0.05 })
+    expect(r.approx).toBeUndefined()
+    expect(r.ratios).toEqual([1, 2])
+  })
+
+  it('with a Leftover, outputs only round up and the Leftover only down', () => {
+    const r = solve({ input: 2000, outputs: outs.map((rate) => ({ rate })), tolerance: 0.02 })
+    expect(r.ok).toBe(true)
+    const sim = simulate(r.graph!, 2000)
+    const sinks = r.graph!.nodes.filter((n) => n.kind === 'sink')
+    sinks.filter((s) => !s.leftover).forEach((s, i) => {
+      const got = sim.nodeInflow.get(s.id)!
+      expect(got).toBeGreaterThanOrEqual(outs[i] - 1e-6)
+      expect(got).toBeLessThanOrEqual(outs[i] * 1.02 + 1e-6)
+    })
+    expect(r.leftover!).toBeLessThanOrEqual(2000 - 1956 + 1e-6)
+  })
+
+  it('several inputs: tiny cuts are dropped, whole machines go to one output', () => {
+    const inputs = [...new Array(65).fill(30), 6]
+    const exact = solve({ input: 0, inputs, outputs: outs.map((rate) => ({ rate })) })
+    const r = solve({ input: 0, inputs, outputs: outs.map((rate) => ({ rate })), tolerance: 0.05 })
+    expect(r.ok).toBe(true)
+    assertStructure(r.graph!)
+    expect(r.inputs!.split).toBeLessThan(exact.inputs!.split + 1)
+    expect(r.loopbacks).toBe(0)
+    expect(r.graph!.nodes.filter((n) => n.kind === 'splitter').length).toBeLessThan(exact.graph!.nodes.filter((n) => n.kind === 'splitter').length)
+    const sim = simulate(r.graph!, 0)
+    r.graph!.nodes
+      .filter((n) => n.kind === 'sink')
+      .forEach((s, i) => {
+        expect(sim.nodeInflow.get(s.id)!).toBeCloseTo(s.target!, 5)
+        expect(Math.abs(s.target! - outs[i]) / outs[i]).toBeLessThanOrEqual(0.05 + 1e-9)
+      })
+  })
+})
+
+describe('approxCandidates', () => {
+  it('keeps every rate within its bound', async () => {
+    const { approxCandidates } = await import('../approx')
+    const rates = [37, 63]
+    for (const c of approxCandidates(rates, rates.map((r) => ({ lo: -0.02 * r, hi: 0.02 * r })), 60)) {
+      const N = c[0] + c[1]
+      c.forEach((x, k) => expect(Math.abs((x / N) * 100 - rates[k]) / rates[k]).toBeLessThanOrEqual(0.02 + 1e-9))
+    }
+  })
+  it('a piece may vanish only when its bound allows it', async () => {
+    const { approxCandidates } = await import('../approx')
+    const withZero = approxCandidates([2, 98], [{ lo: -2, hi: 2 }, { lo: -2, hi: 2 }], 10)
+    expect(withZero.some((c) => c[0] === 0)).toBe(true)
+    const without = approxCandidates([2, 98], [{ lo: -1, hi: 1 }, { lo: -1, hi: 1 }], 10)
+    expect(without.every((c) => c[0] > 0)).toBe(true)
+  })
+})

@@ -1,5 +1,7 @@
 // Top-level entry point: turn a desired input + outputs into a verified graph.
 
+import { maxError, roundedNote, simplestRatio, sinkLabel } from './approx'
+import type { Bound } from './approx'
 import { buildBalancer } from './builder'
 import { solveMulti } from './multi'
 import { fitRatios } from './ratios'
@@ -14,7 +16,7 @@ function round(n: number, dp = 4): number {
 }
 
 export function solve(input: SolveInput): SolveResult {
-  if (input.inputs && input.inputs.length > 1) return solveMulti(input.inputs, input.outputs, input.beltMax)
+  if (input.inputs && input.inputs.length > 1) return solveMulti(input.inputs, input.outputs, input.beltMax, input.tolerance)
   const warnings: SolveWarning[] = []
   const { input: inputRate, beltMax } = input
   let { outputs } = input
@@ -53,9 +55,36 @@ export function solve(input: SolveInput): SolveResult {
   } catch (err) {
     return { ok: false, warnings, error: (err as Error).message }
   }
-  const { ratios, N } = fitted
+  let { ratios, N } = fitted
   if (fitted.snapped) {
     outputs = outputs.map((o, i) => ({ ...o, rate: fitted.rates[i] }))
+  }
+
+  // Within a tolerance, the simplest ratio that keeps every output close.
+  let requested: number[] | undefined
+  let hasLeftover = leftover > 0
+  const tolerance = input.tolerance ?? 0
+  if (tolerance > 0 && outputs.length > 1) {
+    const rates = outputs.map((o) => o.rate)
+    const isLeftover = (i: number) => leftover > 0 && i === outputs.length - 1
+    const bounds: Bound[] = rates.map((r, i) =>
+      isLeftover(i)
+        ? // The leftover only shrinks, even to nothing: what outputs don't take spills into it.
+          { lo: -r, hi: 0 }
+        : { lo: leftover > 0 ? 0 : -tolerance * r, hi: tolerance * r },
+    )
+    const chosen = simplestRatio(rates, bounds, ratios)
+    if (chosen !== ratios) {
+      const n = chosen.reduce((sum, x) => sum + x, 0)
+      const kept = outputs.map((_, i) => i).filter((i) => chosen[i] > 0)
+      requested = kept.map((i) => rates[i])
+      hasLeftover = kept.some(isLeftover)
+      outputs = kept.map((i) => ({ ...outputs[i], rate: (inputRate * chosen[i]) / n }))
+      ratios = kept.map((i) => chosen[i])
+      N = n
+    }
+  }
+  if (fitted.snapped && !requested) {
     warnings.push({ kind: 'info', message: `Rates were treated as the exact ratio ${ratios.join(' : ')}.` })
   }
 
@@ -66,10 +95,9 @@ export function solve(input: SolveInput): SolveResult {
   const sinks = graph.nodes.filter((n) => n.kind === 'sink')
   sinks.forEach((sink, i) => {
     sink.target = outputs[i].rate
-    const rateStr = `${round(outputs[i].rate)}/min`
-    sink.label = outputs[i].label ? `${outputs[i].label} · ${rateStr}` : rateStr
+    sink.label = sinkLabel(outputs[i].label, outputs[i].rate, hasLeftover && i === outputs.length - 1 ? undefined : requested?.[i])
   })
-  if (leftover > 0) sinks[sinks.length - 1].leftover = true
+  if (hasLeftover) sinks[sinks.length - 1].leftover = true
   const source = graph.nodes.find((n) => n.kind === 'source')
   if (source) source.label = `Input · ${round(inputRate)}/min`
 
@@ -96,12 +124,17 @@ export function solve(input: SolveInput): SolveResult {
     }
   }
 
-  if (leftover > 0) {
+  const approx = requested ? { maxError: maxError(hasLeftover ? outputs.slice(0, -1).map((o) => o.rate) : outputs.map((o) => o.rate), requested) } : undefined
+  if (approx) {
+    warnings.push({ kind: 'info', message: roundedNote(approx.maxError, ratios.join(' : '), leftover > 0 ? (hasLeftover ? 'kept' : 'dropped') : 'none') })
+  }
+
+  if (hasLeftover) {
     warnings.push({
       kind: 'leftover',
       message:
         `Outputs add up to ${round(sum)} of ${round(inputRate)}/min, so the ` +
-        `remaining ${round(leftover)}/min goes to a Leftover output (red).`,
+        `remaining ${round(outputs[outputs.length - 1].rate)}/min goes to a Leftover output (red).`,
     })
   }
 
@@ -139,7 +172,8 @@ export function solve(input: SolveInput): SolveResult {
     N,
     leafCount,
     loopbacks,
-    leftover,
+    leftover: hasLeftover ? outputs[outputs.length - 1].rate : 0,
+    approx,
     warnings,
   }
 }

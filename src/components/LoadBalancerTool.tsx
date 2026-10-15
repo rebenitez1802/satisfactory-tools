@@ -17,6 +17,14 @@ interface InputRow {
   rate: string
 }
 
+/** How far each output may be from its rate, for a simpler balancer (see solver/approx.ts). */
+const PRECISIONS: { label: string; value: number }[] = [
+  { label: 'Exact', value: 0 },
+  { label: '±1%', value: 0.01 },
+  { label: '±2%', value: 0.02 },
+  { label: '±5%', value: 0.05 },
+]
+
 /** More input belts than this make the graph unreadable and slow. */
 const MAX_INPUTS = 120
 
@@ -38,9 +46,10 @@ function parse(n: string): number {
 /**
  * Rates handed over in the URL, e.g. from the production planner:
  * `#/balancer?in=120&out=90|Iron Plate&out=30|Iron Rod`. Several inputs
- * repeat `in` or give a count, `in=8x250&in=50`; `cap=1200` sets the belt cap.
+ * repeat `in` or give a count, `in=8x250&in=50`; `cap=1200` sets the belt cap
+ * and `tol=2` the precision (±2%).
  */
-function readPrefill(): { inputs: InputRow[]; outputs: OutputRow[]; cap: number } | null {
+function readPrefill(): { inputs: InputRow[]; outputs: OutputRow[]; cap: number; tolerance: number } | null {
   const query = window.location.hash.split('?')[1]
   if (!query) return null
   const params = new URLSearchParams(query)
@@ -57,6 +66,7 @@ function readPrefill(): { inputs: InputRow[]; outputs: OutputRow[]; cap: number 
       return { id: i, rate, label: label.join('|') }
     }),
     cap: parse(params.get('cap') ?? '') || 0,
+    tolerance: (parse(params.get('tol') ?? '') || 0) / 100,
   }
 }
 
@@ -109,6 +119,9 @@ export function LoadBalancerTool() {
     prefill && prefillSeveral ? prefill.inputs : [{ id: 0, count: '1', rate: '' }],
   )
   const [beltMax, setBeltMax] = useState(prefill?.cap ?? 0)
+  const [tolerance, setTolerance] = useState(
+    PRECISIONS.find((p) => Math.abs(p.value - (prefill?.tolerance ?? 0)) < 1e-9)?.value ?? 0,
+  )
   const [direction, setDirection] = useState<Direction>('BT')
   const [showLabels, setShowLabels] = useState(true)
   const [showBadges, setShowBadges] = useState(true)
@@ -186,8 +199,8 @@ export function LoadBalancerTool() {
       label: r.label.trim() || undefined,
       rate: parse(r.rate),
     }))
-    return solve({ input: inputRate, inputs: inputList, outputs: specs, beltMax: beltMax || undefined })
-  }, [outputs, input, inputRate, inputList, inputError, several, beltMax])
+    return solve({ input: inputRate, inputs: inputList, outputs: specs, beltMax: beltMax || undefined, tolerance })
+  }, [outputs, input, inputRate, inputList, inputError, several, beltMax, tolerance])
 
   const stats = result?.ok ? countNodes(result) : null
   // The leftover note is skipped: the red total row and red output already say it.
@@ -378,6 +391,24 @@ export function LoadBalancerTool() {
                 Horizontal
               </button>
             </div>
+          </div>
+        </div>
+
+        <div className="field">
+          <span title="How far each output may be from its rate. Outputs feeding machines back up when full and pass the rest on, so a little off is fine.">
+            Precision
+          </span>
+          <div className="seg seg-full">
+            {PRECISIONS.map((p) => (
+              <button
+                key={p.value}
+                type="button"
+                className={tolerance === p.value ? 'active' : ''}
+                onClick={() => setTolerance(p.value)}
+              >
+                {p.label}
+              </button>
+            ))}
           </div>
         </div>
 

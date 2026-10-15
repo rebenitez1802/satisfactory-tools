@@ -42,6 +42,7 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | 24 | [Game progress](#24-game-progress) | M2 | High | M | Done (PR #20) |
 | 25 | [Byproduct makers shared between stages](#25-byproduct-makers-shared-between-stages) | M3 | Medium | M | Later |
 | 26 | [Game progress, finer](#26-game-progress-finer) | M3 | Low–Med | S | Later, after #24 |
+| 27 | [Splits as players build them](#27-splits-as-players-build-them) | M2 | High | M | Done (PR #PRNUM) |
 | — | [Mods and data tooling](#deferred-mods-and-data-tooling) | — | — | — | Deferred |
 
 When an item ships, change its status to **Done (PR #n)** and move its rules
@@ -56,7 +57,7 @@ them in this order. #19–#21 came from the user's testing of #2 on
 2026-10-14; "Build in game" goes before the solver work because it is small
 and useful straight away while playing. Reorder freely.
 
-**Next up (2026-10-14): order 8, Use leftovers (#17).** Orders 1–7 are done.
+**Next up (2026-10-14): order 8, Use leftovers (#17).** Orders 1–7 are done, and so is #27.
 
 | Order | PR | Items | Why together |
 |---|---|---|---|
@@ -68,6 +69,7 @@ and useful straight away while playing. Reorder freely.
 | 6a | Resources to avoid | #22 | Done (PR #19). From the user's testing of #6 (2026-10-14): "build this without oil". Split from 6b on 2026-10-14: it covers the oil case alone and touches Optimize and Build chain, not prefs. |
 | 6b | Game progress | #23, #24 | Done (PR #20). Plan early in the game with only what's unlocked. Together because both reshape the Recipes dialog and prefs (one migration, `lockedAlternates` → `lockedRecipes` plus progress); #23 alone is mostly groundwork for #24. |
 | 7 | Real belts | #19, #18 | Done (PR #21). Both turn one logical flow into belts you can build, and share a helper that puts machines onto belts (`src/planner/belts.ts`). |
+| 7b | Splits as players build them | #27 | Done (PR #PRNUM). From the user's testing of #19: balancers for real plan rates were absurd. |
 | 8 | Use leftovers | #17 | Builds on #2 (adding nodes) and #6 (ranking suggestions). |
 | any time | Small standalones | #9, #15, #14, #26 | Independent; slot one in between the big ones. |
 | later | Solver | #25 | Changes rates, so its own PR. |
@@ -663,6 +665,34 @@ you've unlocked. **Effort:** M.
   could be hidden the same way later.
 - **Tests:** at Tier 4, plastic isn't usable and Optimize says so; at
   Tier 5 it is.
+
+### 27. Splits as players build them
+
+**Done.** Its behaviour is in the [README](../README.md#precision)
+(Precision) and [production-planner.md](production-planner.md#presentation)
+("Splits and merges").
+
+**Value:** asked for by the user on 2026-10-14, after #19: a nuclear plan's
+balancers were dozens of splitters and loopbacks deep, mostly to split
+fractions of a part per minute. Their example, 1956 iron ingots into 92.4 /
+88.9 / 1077.2 / 697.5, took 25 splitters, 27 mergers and 123 loopbacks.
+**Effort:** M.
+
+- **Agreed with the user:** both a rounding tolerance (A) and suggestions of
+  how players really build splits (B). The tolerance is a **percentage** of
+  each output: half a part per minute matters at 1.5/min, not at 100.5/min.
+- **A, precision:** Exact / ±1% / ±2% / ±5% in the balancer and the split
+  dialog (`SolveInput.tolerance`, `src/solver/approx.ts`). It searches ratios
+  of up to 600 shares within the tolerance and keeps the one with the fewest
+  buildings, loopbacks counted double. A Leftover never backs up, so with one
+  present the other outputs only round up. With several inputs, tiny cuts are
+  dropped (the floor), since each output shares its allowance among its cuts.
+- **B, the split dialog:** Manifold (recommended when every branch pulls, or
+  one goal goes last for the overflow), Load balancer, and Dedicated machines
+  with a "Split into N groups" plan edit.
+- **Not done:** remembering the dialog's precision between visits; manifold
+  diagrams (the tab is text and a table); treating a goal as a machine when
+  the player knows it backs up.
 
 ### 10. 1.2 power multiplier
 
