@@ -208,6 +208,18 @@ describe('optimize', () => {
       expect(r.solved.totals.missingInputs).toEqual([])
     })
 
+    it('a 🎯 plutonium plant runs on the waste of a Max uranium one', () => {
+      // The targets pass used to hold the Max plant at 0, so there was no
+      // waste and the 🎯 looked out of reach ("the limits leave nothing").
+      const pu = recipeNode('pu', 'Recipe_GeneratorNuclear_PlutoniumFuelRod_C', 'Build_GeneratorNuclear_C', { power: 10000 })
+      const r = run(plan([node(), plant('u235', 'NuclearFuelRod'), pu]), { isRecipeHidden: unlocked() })
+      expect(r.ok).toBe(true)
+      expect(r.scale).toBeCloseTo(1)
+      expect(mw(r, 'pu')).toBeCloseTo(10000)
+      expect(mw(r, 'u235')).toBeCloseTo(30000)
+      expect(r.solved.totals.missingInputs).toEqual([])
+    })
+
     it('with every alternate and a Ficsonium plant, nothing is left short', () => {
       const r = run(plan([node(), plant('u235', 'NuclearFuelRod'), plant('pu', 'PlutoniumFuelRod'), plant('fx', 'FicsoniumFuelRod')]))
       expect(r.ok).toBe(true)
