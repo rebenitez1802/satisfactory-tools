@@ -240,6 +240,16 @@ byproducts (a recipe's second output, or all of a generator's outputs).
     goals take everything they get, so a manifold can't share between them,
     and the load balancer is recommended instead. The tab lists the line in
     order, with each consumer's machines.
+  - **How to build** (`manifoldPlan` in `splits.ts`) lays the manifold out
+    in lines, since a line is a real belt or pipe of the plan's tier
+    (without a tier, one line). Consumer groups go onto as few lines as fit,
+    biggest first; a group bigger than a line is cut into even chunks of
+    whole machines. Each line lists the producers merged onto it, its stops
+    in order (the overflow goal last), and its splitters: one per machine,
+    except the last machine of a line that takes the belt's end. Each branch
+    gets the slowest tier that carries one machine's intake ("Mk.1 branches"),
+    so it can't grab more than that while the line fills. It also notes that
+    with short supply the last machines on a line starve first.
   - **Load balancer:** read-only, as in the balancer tool. The producing
     group is many machines, so it has **one input per machine** (7.5 machines
     are 7 inputs plus one at half rate). Whole machines go straight to an

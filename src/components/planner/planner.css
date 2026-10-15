@@ -840,7 +840,26 @@
   width: auto;
   margin-top: 0;
 }
-.pn-toolbar .pn-button:disabled {
+.pn-toolbar .pn-split-howto {
+  align-self: flex-start;
+  margin-top: 14px;
+}
+.pn-manifold {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.pn-manifold-line {
+  margin-bottom: 12px;
+}
+.pn-manifold-line ol {
+  margin: 4px 0 0;
+  padding-left: 22px;
+}
+.pn-manifold-line li {
+  margin: 2px 0;
+}
+.pn-button:disabled {
   opacity: 0.45;
   cursor: default;
 }
@@ -1385,6 +1404,25 @@
 .pn-opt-actions .pn-button-quiet {
   margin-top: 0;
 }
+.pn-split-howto {
+  align-self: flex-start;
+  margin-top: 14px;
+}
+.pn-manifold {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.pn-manifold-line {
+  margin-bottom: 12px;
+}
+.pn-manifold-line ol {
+  margin: 4px 0 0;
+  padding-left: 22px;
+}
+.pn-manifold-line li {
+  margin: 2px 0;
+}
 .pn-button:disabled {
   opacity: 0.5;
   cursor: default;
@@ -1557,6 +1595,25 @@
 .pn-split-table th:first-child,
 .pn-split-table td:first-child {
   text-align: left;
+}
+.pn-split-howto {
+  align-self: flex-start;
+  margin-top: 14px;
+}
+.pn-manifold {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.pn-manifold-line {
+  margin-bottom: 12px;
+}
+.pn-manifold-line ol {
+  margin: 4px 0 0;
+  padding-left: 22px;
+}
+.pn-manifold-line li {
+  margin: 2px 0;
 }
 .pn-button:disabled {
   opacity: 0.45;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { splitByConsumer, splitByConsumerBlocker } from '../edit'
 import { solvePlan } from '../solve'
-import { adviseSplit } from '../splits'
+import { adviseSplit, manifoldPlan } from '../splits'
 import type { Plan } from '../types'
 import { catalog, goalNode, plan, recipeNode, supplyNode } from './fixtures'
 
@@ -84,5 +84,43 @@ describe('splitByConsumer', () => {
     expect(splitByConsumer(limited, 'smelt', INGOT, () => 'x').ids).toEqual([])
     expect(splitByConsumerBlocker(twoWay(), 'plate', 'base:Desc_IronPlate_C')).toMatch(/one belt/)
     expect(splitByConsumerBlocker(twoWay(), 'ore', 'base:Desc_OreIron_C')).toMatch(/recipe/)
+  })
+})
+
+describe('manifoldPlan', () => {
+  const layout = (p: Plan) => manifoldPlan(advise(p), catalog, p, INGOT)
+  const mk = (n: number) => ({ settings: { machineMode: 'fractional' as const, beltTier: `base:Build_ConveyorBeltMk${n}_C` } })
+
+  it('lines never carry more than the tier; a big group is cut into even chunks', () => {
+    const m = layout(twoWay(mk(4)))
+    expect(m.tier?.ratePerMin).toBe(480)
+    expect(m.lines.map((l) => l.perMin)).toEqual([450, 450, 400])
+    expect(m.lines[0].stops[0]).toMatchObject({ machines: 15, part: 1, parts: 2 })
+    expect(m.lines.map((l) => l.producers)).toEqual([15, 15, expect.closeTo(13.333, 3)])
+  })
+
+  it('whole groups share a line when they fit', () => {
+    const m = layout(twoWay(mk(6)))
+    expect(m.lines.map((l) => l.stops.length)).toEqual([1, 1])
+    const one = layout(twoWay())
+    expect(one.tier).toBeUndefined()
+    expect(one.lines).toHaveLength(1)
+    // 30 + 27 machines; the last on the line takes the belt's end.
+    expect(one.splitters).toBe(56)
+  })
+
+  it('branches on the slowest tier that carries one machine', () => {
+    const m = layout(twoWay(mk(6)))
+    for (const l of m.lines) for (const s of l.stops) expect(s.branch?.ratePerMin).toBe(60)
+  })
+
+  it('a goal goes last and needs no splitter of its own', () => {
+    const m = layout(twoWay(mk(6), true))
+    const last = m.lines[m.lines.length - 1]
+    expect(last.stops[last.stops.length - 1].taker).toBe(true)
+    expect(m.lines.flatMap((l) => l.stops).find((s) => s.taker)?.branch).toBeUndefined()
+    const one = layout(twoWay({}, true))
+    expect(one.lines[0].stops.map((s) => s.taker)).toEqual([false, true])
+    expect(one.splitters).toBe(30)
   })
 })

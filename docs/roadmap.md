@@ -43,7 +43,7 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | 25 | [Byproduct makers shared between stages](#25-byproduct-makers-shared-between-stages) | M3 | Medium | M | Later |
 | 26 | [Game progress, finer](#26-game-progress-finer) | M3 | Low–Med | S | Later, after #24 |
 | 27 | [Splits as players build them](#27-splits-as-players-build-them) | M2 | High | M | Done (PR #22) |
-| 28 | [Manifold: how to build](#28-manifold-how-to-build) | M2 | High | S–M | Planned, after #27 |
+| 28 | [Manifold: how to build](#28-manifold-how-to-build) | M2 | High | S–M | Done (PR #22) |
 | — | [Mods and data tooling](#deferred-mods-and-data-tooling) | — | — | — | Deferred |
 
 When an item ships, change its status to **Done (PR #n)** and move its rules
@@ -58,7 +58,7 @@ them in this order. #19–#21 came from the user's testing of #2 on
 2026-10-14; "Build in game" goes before the solver work because it is small
 and useful straight away while playing. Reorder freely.
 
-**Next up (2026-10-14): order 8, Use leftovers (#17).** Orders 1–7 are done, and so is #27. #28 (manifold how-to) can go in between: it is small and builds on #27.
+**Next up (2026-10-14): order 8, Use leftovers (#17).** Orders 1–7 are done, and so are #27 and #28.
 
 | Order | PR | Items | Why together |
 |---|---|---|---|
@@ -696,6 +696,11 @@ fractions of a part per minute. Their example, 1956 iron ingots into 92.4 /
   the player knows it backs up.
 
 ### 28. Manifold: how to build
+
+**Done** in PR #22, with #27. Its behaviour is in
+[production-planner.md](production-planner.md#presentation) ("Splits and
+merges"). Not done: a diagram of the lines (the section is text), and
+letting the player reorder the stops.
 
 **Value:** asked for by the user on 2026-10-14 while testing #27. The
 Manifold tab says a manifold works, but not how to lay one out. **Effort:** S–M.

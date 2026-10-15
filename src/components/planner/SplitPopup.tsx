@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { solve } from '../../solver'
-import { adviseSplit, groupEnd, machineRates, machinesOnBelts } from '../../planner'
-import type { Plan, Split, SplitAdvice } from '../../planner'
+import { adviseSplit, groupEnd, machineRates, machinesOnBelts, manifoldPlan } from '../../planner'
+import type { ManifoldPlan, Plan, Split, SplitAdvice } from '../../planner'
 import { GraphView } from '../GraphView'
 import { fmt, pct, tierName } from './format'
 import { Icon } from './Icon'
@@ -78,7 +78,7 @@ export function SplitPopup({ split, plan, onClose, onSplitGroups }: { split: Spl
             </button>
           ))}
         </div>
-        {tab === 'manifold' && <ManifoldView advice={advice} split={split} label={label} unit={unit} producer={machineName} />}
+        {tab === 'manifold' && <ManifoldView advice={advice} split={split} plan={plan} label={label} unit={unit} producer={machineName} />}
         {tab === 'balancer' && <BalancerView split={split} plan={plan} advice={advice} label={label} />}
         {tab === 'dedicated' && advice.dedicated && (
           <DedicatedView
@@ -96,14 +96,29 @@ export function SplitPopup({ split, plan, onClose, onSplitGroups }: { split: Spl
   )
 }
 
-function ManifoldView({ advice, split, label, unit, producer }: { advice: SplitAdvice; split: Split; label: (id: string) => string; unit: string; producer?: string }) {
+function ManifoldView({
+  advice,
+  split,
+  plan,
+  label,
+  unit,
+  producer,
+}: {
+  advice: SplitAdvice
+  split: Split
+  plan: Plan
+  label: (id: string) => string
+  unit: string
+  producer?: string
+}) {
   const { catalog } = usePlanner()
+  const [howTo, setHowTo] = useState(false)
+  const layout = useMemo(() => manifoldPlan(advice, catalog, plan, split.item), [advice, catalog, plan, split.item])
   const item = catalog.items.get(split.item)
   // Machines first; the one output that takes everything goes last.
   const line = [...advice.branches].sort((a, b) => Number(a.edge === advice.overflow) - Number(b.edge === advice.overflow))
   const overflow = advice.branches.find((b) => b.edge === advice.overflow)
   const takers = advice.branches.filter((b) => b.taker)
-  const splitters = line.reduce((s, b) => s + (b.consumers ? Math.ceil(b.consumers.count - 1e-6) : 1), 0)
   return (
     <div className="pn-modal-body pn-split-body">
       {advice.manifold ? (
@@ -116,7 +131,7 @@ function ManifoldView({ advice, split, label, unit, producer }: { advice: SplitA
       )}
       <p>
         Run the {item?.name ?? 'item'} {item?.form === 'solid' ? 'belt' : 'pipe'} past the consumers with a splitter in front of each machine
-        (about {splitters}). Machines take only what they need; once they're full the line backs up and the splitters pass the rest on. It takes a
+        (about {layout.splitters}). Machines take only what they need; once they're full the line backs up and the splitters pass the rest on. It takes a
         while to fill up, and until then the first machines get more.
       </p>
       {overflow && (
@@ -149,18 +164,90 @@ function ManifoldView({ advice, split, label, unit, producer }: { advice: SplitA
           ))}
         </tbody>
       </table>
+      <button type="button" className="pn-button pn-split-howto" aria-expanded={howTo} onClick={() => setHowTo((v) => !v)}>
+        {howTo ? 'Hide how to build' : 'How to build'}
+      </button>
+      {howTo && <ManifoldHowTo advice={advice} layout={layout} split={split} label={label} unit={unit} producer={producer} />}
+    </div>
+  )
+}
+
+/** The manifold laid out: lines no faster than the plan's tier, each machine group's stop and branch tier. */
+function ManifoldHowTo({
+  advice,
+  layout,
+  split,
+  label,
+  unit,
+  producer,
+}: {
+  advice: SplitAdvice
+  layout: ManifoldPlan
+  split: Split
+  label: (id: string) => string
+  unit: string
+  producer?: string
+}) {
+  const { catalog, result } = usePlanner()
+  const kind = catalog.items.get(split.item)?.form === 'solid' ? 'belt' : 'pipe'
+  const target = new Map(advice.branches.map((b) => [b.edge, b]))
+  const clockOf = (node: string) => result.nodes.get(node)?.setup?.clock ?? 1
+  const branches = [...new Map(layout.lines.flatMap((l) => l.stops.filter((s) => s.branch).map((s) => [s.branch!.id, s.branch!]))).values()]
+  const lineTier = layout.tier
+  return (
+    <div className="pn-manifold">
+      <p className="pn-dim">
+        {lineTier
+          ? `${layout.lines.length} ${tierName(lineTier)} ${kind}${layout.lines.length === 1 ? '' : 's'} (${fmt(lineTier.ratePerMin)}${unit}/min each at most), ${layout.splitters} splitters.`
+          : `One line, ${layout.splitters} splitters. Set a ${kind} tier in the plan to split it into lines you can build.`}
+      </p>
+      {layout.lines.map((line, i) => (
+        <div key={i} className="pn-manifold-line">
+          <div>
+            <strong>Line {i + 1}</strong> · {fmt(line.perMin)}
+            {unit}/min
+            {line.producers !== undefined && ` · from ${groupText(line.producers, clockOf(split.node), producer ?? 'machine')} merged onto it`} ·{' '}
+            {line.splitters} splitter{line.splitters === 1 ? '' : 's'}
+          </div>
+          <ol>
+            {line.stops.map((stop, k) => {
+              const b = target.get(stop.edge)!
+              const name = b.consumers && catalog.machines.get(b.consumers.machine)?.name
+              return (
+                <li key={k}>
+                  {label(b.target)}
+                  {stop.parts && ` (part ${stop.part} of ${stop.parts})`} · {fmt(stop.perMin)}
+                  {unit}/min
+                  {stop.machines !== undefined && ` · ${groupText(stop.machines, clockOf(b.target), name ?? 'machine')}`}
+                  {stop.branch && ` · ${tierName(stop.branch)} branches`}
+                  {stop.taker && ` · the ${kind} ends here: it takes the overflow`}
+                </li>
+              )
+            })}
+          </ol>
+        </div>
+      ))}
+      {branches.length > 0 && (
+        <p>
+          Branches on {branches.map((t) => tierName(t)).join(' / ')}: slower than the line, so while it fills a machine can't grab more than its
+          branch carries, and the machines further down start sooner. Once full it makes no difference.
+        </p>
+      )}
+      <p>If supply falls short, the last machines on a line starve first: put the consumer that matters most first.</p>
     </div>
   )
 }
 
 /**
- * A sub-group as built: whole machines sharing one clock, "14 at 95.2%", the
- * way the underclock machine mode counts them.
+ * A sub-group as built: whole machines sharing one clock, "14 at 95.2%" (or
+ * "14 Smelters at 95.2%" with a name), the way the underclock machine mode
+ * counts them.
  */
-function groupText(machines: number, clock: number): string {
+function groupText(machines: number, clock: number, name?: string): string {
   const n = Math.max(1, Math.ceil(machines - 1e-6))
   const each = (clock * machines) / n
-  return Math.abs(each - 1) < 1e-6 ? `${n}` : `${n} at ${pct(each)}`
+  const what = name ? `${n} ${name}${n === 1 ? '' : 's'}` : `${n}`
+  return Math.abs(each - 1) < 1e-6 ? what : `${what} at ${pct(each)}`
 }
 
 function DedicatedView({
