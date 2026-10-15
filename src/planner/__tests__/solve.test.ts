@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { shortfall, solvePlan } from '../solve'
+import { shortfall, solvePlan, spare } from '../solve'
 import type { Plan, PlanNode } from '../types'
 import { catalog, extractorNode, goalNode, machine, plan, recipeNode, supplyNode } from './fixtures'
 
@@ -937,5 +937,15 @@ describe('byproducts feeding their maker\'s own goal', () => {
     expect(r.goals[0].achieved).toBeCloseTo(60)
     expect(r.totals.missingInputs).toEqual([{ item: 'base:Desc_Silica_C', perMin: expect.closeTo(50) }])
     expect(r.diagnostics.map((d) => d.message)).toEqual([expect.stringContaining('Silica is 50/min short')])
+  })
+
+  it('spare ignores rounding crumbs from loops', () => {
+    // 423 uranium waste made, all but 0.0000018 taken: a loop's rounding,
+    // not 0/min of waste to store.
+    const port = { item: 'base:Desc_NuclearWaste_C', produced: 423.0000003, used: 422.9999985, connected: true }
+    expect(spare(port)).toBe(0)
+    expect(spare({ ...port, used: 400 })).toBeCloseTo(23)
+    // A source's capacity counts: a 60/min supply sending 45 has 15 spare.
+    expect(spare({ ...port, produced: 45, used: 45 }, 60)).toBeCloseTo(15)
   })
 })

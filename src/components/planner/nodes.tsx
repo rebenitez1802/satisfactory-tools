@@ -11,7 +11,7 @@ import { Handle, Position, type Node, type NodeProps } from '@xyflow/react'
 import type { ReactNode } from 'react'
 import type { Item, ItemId, Machine } from '../../catalog'
 import type { ExtractorNode, GoalNode, InputPort, NodeResult, OutputPort, PlanNode, RecipeNode, SupplyNode } from '../../planner'
-import { doneShortfall, shortfall } from '../../planner'
+import { doneShortfall, shortfall, spare } from '../../planner'
 import { fmt, mw, pct } from './format'
 import { Icon } from './Icon'
 import { usePlanner } from './plannerContext'
@@ -61,17 +61,17 @@ function OutPort({ nodeId, port, capacity }: { nodeId: string; port: OutputPort;
   const { result, openSplit } = usePlanner()
   const item = useItem(port.item)
   // Sources with a fixed capacity: anything not used is spare too.
-  const spare = Math.max(port.produced, capacity ?? 0) - port.used
+  const left = spare(port, capacity)
   const split = result.splits.find((s) => s.node === nodeId && s.item === port.item)
   // Nothing connected yet: show the rate on the card, not only in the
-  // tooltip. (An open end's output counts as used, so this isn't `spare`.)
+  // tooltip. (An open end's output counts as used, so this isn't spare.)
   const out = Math.max(port.produced, capacity ?? 0)
   const loose = !port.connected && out > EPS
   const tip =
-    `${item.name}: makes ${fmt(port.produced)}${unit(item)}${spare > EPS ? ` · ${fmt(spare)} spare` : ''}` +
+    `${item.name}: makes ${fmt(port.produced)}${unit(item)}${left ? ` · ${fmt(left)} spare` : ''}` +
     ' — drag onto a node to connect, or onto empty space to add a consumer.'
   return (
-    <div className={`pn-port pn-port-out${spare > EPS ? ' pn-port-spare' : ''}${loose ? ' pn-port-rated' : ''}`}>
+    <div className={`pn-port pn-port-out${left ? ' pn-port-spare' : ''}${loose ? ' pn-port-rated' : ''}`}>
       <Icon of={item} size={24} title={tip} />
       {loose && <span className="pn-port-rate">{fmt(out)}</span>}
       <Handle type="source" position={Position.Right} id={outHandle(port.item)} className={`pn-handle pn-${item.form}`} title={tip} />
