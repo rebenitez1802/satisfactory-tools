@@ -250,8 +250,9 @@ byproducts (a recipe's second output, or all of a generator's outputs).
     Load Balancer" carries the inputs (`in=30x30`), the cap and the precision.
   - **Dedicated machines**, for producer machine groups: one sub-group per
     consumer, so the item never splits. Exact, and no splitters, for at most
-    one partly clocked machine per sub-group ("13 + 1 at 33.3%" in
-    fractional mode, "14 at 95.2%" underclocked). **Split into N groups**
+    one extra machine per sub-group. Each sub-group is shown as whole
+    machines sharing one clock ("14 at 95.2%"), as the underclock machine
+    mode counts them, whatever the plan's mode. **Split into N groups**
     does it in the plan (`splitByConsumer` in `edit.ts`): the first belt
     stays on the node, every other belt moves to a copy below it, and every
     copy gets the node's input belts. It is offered only for plain recipe

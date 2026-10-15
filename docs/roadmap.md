@@ -43,6 +43,7 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | 25 | [Byproduct makers shared between stages](#25-byproduct-makers-shared-between-stages) | M3 | Medium | M | Later |
 | 26 | [Game progress, finer](#26-game-progress-finer) | M3 | Low–Med | S | Later, after #24 |
 | 27 | [Splits as players build them](#27-splits-as-players-build-them) | M2 | High | M | Done (PR #22) |
+| 28 | [Manifold: how to build](#28-manifold-how-to-build) | M2 | High | S–M | Planned, after #27 |
 | — | [Mods and data tooling](#deferred-mods-and-data-tooling) | — | — | — | Deferred |
 
 When an item ships, change its status to **Done (PR #n)** and move its rules
@@ -57,7 +58,7 @@ them in this order. #19–#21 came from the user's testing of #2 on
 2026-10-14; "Build in game" goes before the solver work because it is small
 and useful straight away while playing. Reorder freely.
 
-**Next up (2026-10-14): order 8, Use leftovers (#17).** Orders 1–7 are done, and so is #27.
+**Next up (2026-10-14): order 8, Use leftovers (#17).** Orders 1–7 are done, and so is #27. #28 (manifold how-to) can go in between: it is small and builds on #27.
 
 | Order | PR | Items | Why together |
 |---|---|---|---|
@@ -693,6 +694,43 @@ fractions of a part per minute. Their example, 1956 iron ingots into 92.4 /
 - **Not done:** remembering the dialog's precision between visits; manifold
   diagrams (the tab is text and a table); treating a goal as a machine when
   the player knows it backs up.
+
+### 28. Manifold: how to build
+
+**Value:** asked for by the user on 2026-10-14 while testing #27. The
+Manifold tab says a manifold works, but not how to lay one out. **Effort:** S–M.
+
+- **The problem:** a manifold's main line is a real belt, so it can't carry
+  more than the tier (1300 ingots/min is two Mk.6 lines, never one). And
+  consumers taking very different rates off one line fill unevenly while the
+  line starts up.
+- **What the game does (to explain in the tab):**
+  - Once full, any manifold gives every machine exactly what it needs, as long
+    as supply covers demand and every branch backs up. Different intake rates
+    don't change that, only how long it takes to fill.
+  - A splitter sends items round-robin to the outputs that can take them, so a
+    branch takes at most its own belt's speed. The user's trick, a Mk.1
+    branch to a 30/min machine off a Mk.5 line, caps what that branch can grab
+    while the line fills, so machines further down start sooner. It costs
+    nothing once the line is full, so suggest it: each branch on the slowest
+    tier that carries one machine's intake.
+  - Short supply is where a manifold differs from a balancer: the last
+    machines on the line starve, instead of everyone running a bit slower.
+    Say so, and suggest the most important consumer goes first.
+- **"How to build" in the Manifold tab:**
+  - **Lines:** put the producers onto the fewest belts of the plan's tier
+    (`machinesOnBelts`, #18), then assign whole consumer groups to lines (fewest
+    lines, a group split across two lines only when it doesn't fit). Each line
+    is its own manifold: "Line 1 · Mk.6 · 1050/min: 35 Smelters → 35
+    Constructors (Iron Plate)".
+  - **Branches:** per consumer group, the branch tier ("Mk.1 branches, 30/min
+    each") and the splitter count.
+  - **Order:** pulling groups first, a goal that takes the overflow last.
+  - Mixed lines (two consumer recipes on one line) are fine once full; mention
+    the fill-up order.
+- **Implementation:** a pure `manifoldPlan(advice, tiers)` in
+  `src/planner/splits.ts`, using catalog tiers only. Tests: lines that fit, a
+  consumer group split across lines, branch tiers, a goal last.
 
 ### 10. 1.2 power multiplier
 

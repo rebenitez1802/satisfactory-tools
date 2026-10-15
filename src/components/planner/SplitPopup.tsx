@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { solve } from '../../solver'
 import { adviseSplit, groupEnd, machineRates, machinesOnBelts } from '../../planner'
-import type { MachineMode, Plan, Split, SplitAdvice } from '../../planner'
+import type { Plan, Split, SplitAdvice } from '../../planner'
 import { GraphView } from '../GraphView'
 import { fmt, pct, tierName } from './format'
 import { Icon } from './Icon'
@@ -87,7 +87,6 @@ export function SplitPopup({ split, plan, onClose, onSplitGroups }: { split: Spl
             unit={unit}
             name={machineName ?? 'machine'}
             clock={planResult.nodes.get(split.node)?.setup?.clock ?? 1}
-            mode={plan.settings.machineMode}
             source={source ? nodeLabel(source, catalog) : 'the group'}
             onSplit={onSplitGroups}
           />
@@ -154,14 +153,14 @@ function ManifoldView({ advice, split, label, unit, producer }: { advice: SplitA
   )
 }
 
-/** A sub-group as built: "35 + 1 at 91%" (fractional mode) or "36 at 99.7%" (underclocked). */
-function groupText(machines: number, clock: number, mode: MachineMode): string {
-  const whole = Math.floor(machines + 1e-6)
-  const part = machines - whole
-  if (part < 1e-6) return `${whole}`
-  if (mode === 'fractional') return whole > 0 ? `${whole} + 1 at ${pct(clock * part)}` : `1 at ${pct(clock * part)}`
-  const n = whole + 1
-  return `${n} at ${pct((clock * machines) / n)}`
+/**
+ * A sub-group as built: whole machines sharing one clock, "14 at 95.2%", the
+ * way the underclock machine mode counts them.
+ */
+function groupText(machines: number, clock: number): string {
+  const n = Math.max(1, Math.ceil(machines - 1e-6))
+  const each = (clock * machines) / n
+  return Math.abs(each - 1) < 1e-6 ? `${n}` : `${n} at ${pct(each)}`
 }
 
 function DedicatedView({
@@ -170,7 +169,6 @@ function DedicatedView({
   unit,
   name,
   clock,
-  mode,
   source,
   onSplit,
 }: {
@@ -179,7 +177,6 @@ function DedicatedView({
   unit: string
   name: string
   clock: number
-  mode: MachineMode
   source: string
   onSplit: () => void
 }) {
@@ -192,7 +189,7 @@ function DedicatedView({
         <p>
           Give each consumer its own {name}s. Each sub-group makes exactly what its consumer takes, so the belts never meet.{' '}
           {d.built > d.shared
-            ? `That's ${d.built} ${name}s instead of ${d.shared}: every sub-group has its own partly clocked machine.`
+            ? `That's ${d.built} ${name}s instead of ${d.shared}: every sub-group rounds up to whole machines.`
             : `Still ${d.shared} ${name}s.`}{' '}
           Their own inputs come from the same suppliers, which the machines pull from like a manifold.
         </p>
@@ -210,7 +207,7 @@ function DedicatedView({
               <tr key={g.edge}>
                 <td>{label(target.get(g.edge)!)}</td>
                 <td>{fmt(g.perMin)}</td>
-                <td>{groupText(g.machines, clock, mode)}</td>
+                <td>{groupText(g.machines, clock)}</td>
                 {d.groups.some((x) => x.belts) && <td>{g.belts ?? '–'}</td>}
               </tr>
             ))}
