@@ -328,9 +328,9 @@ export function optimize(plan: Plan, catalog: Catalog, opts: OptimizeOptions): O
     objective: number[]
     /** Numeric targets: × this scale, or × the extra variable. */
     scale: number | 'var'
-    /** Max groups: at least these values; others 0 unless `free`. */
+    /** Max groups: at least these values; others 0 unless `free` (`'all'`: none held to 0). */
     maxAt?: Map<number, number>
-    free?: number
+    free?: number | 'all'
     /** Max groups ≥ extra × these. */
     share?: Map<number, number>
     world: boolean
@@ -354,7 +354,7 @@ export function optimize(plan: Plan, catalog: Catalog, opts: OptimizeOptions): O
       else constraints.push({ terms: [[j, 1]], op: '=', rhs: a * o.scale })
     }
     groups.forEach(({ terms }, k) => {
-      if (o.free === k) return
+      if (o.free === k || o.free === 'all') return
       if (o.share?.has(k)) constraints.push({ terms: [...terms, [extra, -o.share.get(k)!]], op: '>=', rhs: 0 })
       else if (o.maxAt?.has(k)) constraints.push({ terms, op: '>=', rhs: o.maxAt.get(k)! })
       else constraints.push({ terms, op: '<=', rhs: 0 })
@@ -370,10 +370,11 @@ export function optimize(plan: Plan, catalog: Catalog, opts: OptimizeOptions): O
   }
   const value = (x: number[], terms: [number, number][]) => terms.reduce((sum, [j, w]) => sum + w * x[j], 0)
 
-  // 1. How much of the 🎯 targets the limits allow.
+  // 1. How much of the 🎯 targets the limits allow. Max generators may run
+  // here: a 🎯 plutonium plant lives on the waste of a Max uranium one.
   let scale = 1
   if (targets.length) {
-    const r = solveLp(program({ objective: maximize([[extra, 1]]), scale: 'var', world: true }))
+    const r = solveLp(program({ objective: maximize([[extra, 1]]), scale: 'var', free: 'all', world: true }))
     if (r.status !== 'optimal' || r.x[extra] <= EPS) {
       return fail(
         r.status === 'optimal' || r.status === 'infeasible'

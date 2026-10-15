@@ -432,7 +432,8 @@ byproducts (a recipe's second output, or all of a generator's outputs).
   - 🎯 targets (goals, and generators' MW) are met together. If the limits
     can't take them all, every target is scaled by the same factor, and
     the dialog says so: "The limits allow 50% of the 🎯 targets; the plan
-    is built for that."
+    is built for that." Max generators may run while the targets are
+    sized, so a 🎯 plutonium plant can live on a Max uranium plant's waste.
   - **Max** goals and Max generators get as much as the limits allow, after
     the targets. Several Max goals each get the same share of what they
     could reach alone. Max generators count as one goal, of MW, so plants
