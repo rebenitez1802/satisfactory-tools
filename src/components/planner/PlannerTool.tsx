@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import type { Catalog, ItemId } from '../../catalog'
-import { builtCount, duplicateNodes, worldSites, markDone, missingInputs, newNodeId, recipeAccess, removeNodes, setRecipe, solvePlan, updateNode, validatePlan } from '../../planner'
+import { builtCount, duplicateNodes, splitByConsumer, worldSites, markDone, missingInputs, newNodeId, recipeAccess, removeNodes, setRecipe, solvePlan, updateNode, validatePlan } from '../../planner'
 import type { Plan, PlanEdge, PlanNode, PlanSettings } from '../../planner'
-import { BalancerPopup } from './BalancerPopup'
+import { SplitPopup } from './SplitPopup'
 import { OptimizeModal } from './OptimizeModal'
 import { RecipesModal } from './RecipesModal'
 import { WorldModal } from './WorldModal'
@@ -369,7 +369,17 @@ function Planner() {
           </button>
         </div>
       )}
-      {split && <BalancerPopup split={split} plan={plan} onClose={() => setOpenSplit(null)} />}
+      {split && (
+        <SplitPopup
+          split={split}
+          plan={plan}
+          onClose={() => setOpenSplit(null)}
+          onSplitGroups={() => {
+            setPlan((p) => splitByConsumer(p, split.node, split.item, newNodeId).plan)
+            setOpenSplit(null)
+          }}
+        />
+      )}
       {showOptimize && (
         <OptimizeModal
           plan={plan}

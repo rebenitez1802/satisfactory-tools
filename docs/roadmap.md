@@ -42,6 +42,8 @@ The game-data layer is in [data-model.md](data-model.md). Agent onboarding is in
 | 24 | [Game progress](#24-game-progress) | M2 | High | M | Done (PR #20) |
 | 25 | [Byproduct makers shared between stages](#25-byproduct-makers-shared-between-stages) | M3 | Medium | M | Later |
 | 26 | [Game progress, finer](#26-game-progress-finer) | M3 | Low–Med | S | Later, after #24 |
+| 27 | [Splits as players build them](#27-splits-as-players-build-them) | M2 | High | M | Done (PR #22) |
+| 28 | [Manifold: how to build](#28-manifold-how-to-build) | M2 | High | S–M | Done (PR #22) |
 | — | [Mods and data tooling](#deferred-mods-and-data-tooling) | — | — | — | Deferred |
 
 When an item ships, change its status to **Done (PR #n)** and move its rules
@@ -56,7 +58,7 @@ them in this order. #19–#21 came from the user's testing of #2 on
 2026-10-14; "Build in game" goes before the solver work because it is small
 and useful straight away while playing. Reorder freely.
 
-**Next up (2026-10-14): order 8, Use leftovers (#17).** Orders 1–7 are done.
+**Next up (2026-10-14): order 8, Use leftovers (#17).** Orders 1–7 are done, and so are #27 and #28.
 
 | Order | PR | Items | Why together |
 |---|---|---|---|
@@ -68,6 +70,7 @@ and useful straight away while playing. Reorder freely.
 | 6a | Resources to avoid | #22 | Done (PR #19). From the user's testing of #6 (2026-10-14): "build this without oil". Split from 6b on 2026-10-14: it covers the oil case alone and touches Optimize and Build chain, not prefs. |
 | 6b | Game progress | #23, #24 | Done (PR #20). Plan early in the game with only what's unlocked. Together because both reshape the Recipes dialog and prefs (one migration, `lockedAlternates` → `lockedRecipes` plus progress); #23 alone is mostly groundwork for #24. |
 | 7 | Real belts | #19, #18 | Done (PR #21). Both turn one logical flow into belts you can build, and share a helper that puts machines onto belts (`src/planner/belts.ts`). |
+| 7b | Splits as players build them | #27 | Done (PR #22). From the user's testing of #19: balancers for real plan rates were absurd. |
 | 8 | Use leftovers | #17 | Builds on #2 (adding nodes) and #6 (ranking suggestions). |
 | any time | Small standalones | #9, #15, #14, #26 | Independent; slot one in between the big ones. |
 | later | Solver | #25 | Changes rates, so its own PR. |
@@ -663,6 +666,76 @@ you've unlocked. **Effort:** M.
   could be hidden the same way later.
 - **Tests:** at Tier 4, plastic isn't usable and Optimize says so; at
   Tier 5 it is.
+
+### 27. Splits as players build them
+
+**Done.** Its behaviour is in the [README](../README.md#precision)
+(Precision) and [production-planner.md](production-planner.md#presentation)
+("Splits and merges").
+
+**Value:** asked for by the user on 2026-10-14, after #19: a nuclear plan's
+balancers were dozens of splitters and loopbacks deep, mostly to split
+fractions of a part per minute. Their example, 1956 iron ingots into 92.4 /
+88.9 / 1077.2 / 697.5, took 25 splitters, 27 mergers and 123 loopbacks.
+**Effort:** M.
+
+- **Agreed with the user:** both a rounding tolerance (A) and suggestions of
+  how players really build splits (B). The tolerance is a **percentage** of
+  each output: half a part per minute matters at 1.5/min, not at 100.5/min.
+- **A, precision:** Exact / ±1% / ±2% / ±5% in the balancer and the split
+  dialog (`SolveInput.tolerance`, `src/solver/approx.ts`). It searches ratios
+  of up to 600 shares within the tolerance and keeps the one with the fewest
+  buildings, loopbacks counted double. A Leftover never backs up, so with one
+  present the other outputs only round up. With several inputs, tiny cuts are
+  dropped (the floor), since each output shares its allowance among its cuts.
+- **B, the split dialog:** Manifold (recommended when every branch pulls, or
+  one goal goes last for the overflow), Load balancer, and Dedicated machines
+  with a "Split into N groups" plan edit.
+- **Not done:** remembering the dialog's precision between visits; manifold
+  diagrams (the tab is text and a table); treating a goal as a machine when
+  the player knows it backs up.
+
+### 28. Manifold: how to build
+
+**Done** in PR #22, with #27. Its behaviour is in
+[production-planner.md](production-planner.md#presentation) ("Splits and
+merges"). Not done: a diagram of the lines (the section is text), and
+letting the player reorder the stops.
+
+**Value:** asked for by the user on 2026-10-14 while testing #27. The
+Manifold tab says a manifold works, but not how to lay one out. **Effort:** S–M.
+
+- **The problem:** a manifold's main line is a real belt, so it can't carry
+  more than the tier (1300 ingots/min is two Mk.6 lines, never one). And
+  consumers taking very different rates off one line fill unevenly while the
+  line starts up.
+- **What the game does (to explain in the tab):**
+  - Once full, any manifold gives every machine exactly what it needs, as long
+    as supply covers demand and every branch backs up. Different intake rates
+    don't change that, only how long it takes to fill.
+  - A splitter sends items round-robin to the outputs that can take them, so a
+    branch takes at most its own belt's speed. The user's trick, a Mk.1
+    branch to a 30/min machine off a Mk.5 line, caps what that branch can grab
+    while the line fills, so machines further down start sooner. It costs
+    nothing once the line is full, so suggest it: each branch on the slowest
+    tier that carries one machine's intake.
+  - Short supply is where a manifold differs from a balancer: the last
+    machines on the line starve, instead of everyone running a bit slower.
+    Say so, and suggest the most important consumer goes first.
+- **"How to build" in the Manifold tab:**
+  - **Lines:** put the producers onto the fewest belts of the plan's tier
+    (`machinesOnBelts`, #18), then assign whole consumer groups to lines (fewest
+    lines, a group split across two lines only when it doesn't fit). Each line
+    is its own manifold: "Line 1 · Mk.6 · 1050/min: 35 Smelters → 35
+    Constructors (Iron Plate)".
+  - **Branches:** per consumer group, the branch tier ("Mk.1 branches, 30/min
+    each") and the splitter count.
+  - **Order:** pulling groups first, a goal that takes the overflow last.
+  - Mixed lines (two consumer recipes on one line) are fine once full; mention
+    the fill-up order.
+- **Implementation:** a pure `manifoldPlan(advice, tiers)` in
+  `src/planner/splits.ts`, using catalog tiers only. Tests: lines that fit, a
+  consumer group split across lines, branch tiers, a goal last.
 
 ### 10. 1.2 power multiplier
 

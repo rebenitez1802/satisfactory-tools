@@ -46,7 +46,9 @@ resources by how many nodes the map has, and previews the change. A plan
 can list resources not to use ("build this without oil"), which ✨ Optimize
 and ⚡ Build chain both follow. Game progress (HUB tier and MAM research) and
 per-recipe locks decide which recipes are offered at all. Splits
-open a read-only load balancer fed by one input per machine, and the belt
+open a split dialog: a manifold when the consumers are machines, a load
+balancer (one input per machine, ±% precision), or dedicated machines per
+consumer. The belt
 inspector says how to put a flow on several belts. A build checklist (✓ on each card) and the
 build cost help while building the plan in the game. Plans live in tabs and autosave to
 localStorage. Game data comes from **mod-ready data packs** (see "Production
@@ -140,9 +142,10 @@ src/
                             buildcost.ts (build checklist, build cost), optimize.ts (✨ Optimize)
                             on lp.ts (simplex), world.ts (world node counts and caps),
                             progress.ts (game progress, which recipes are usable),
-                            belts.ts (machines onto belts: belt inspector, balancer inputs)
+                            belts.ts (machines onto belts: belt inspector, balancer inputs),
+                            splits.ts (⑂ advice: manifold, balancer or dedicated machines)
   components/planner/       Planner UI: PlannerTool (state, tabs, history), PlanCanvas (React Flow),
-                            nodes.tsx (cards), Inspector, Picker, RecipeSelect, BalancerPopup,
+                            nodes.tsx (cards), Inspector, Picker, RecipeSelect, SplitPopup (⑂: manifold, balancer, dedicated machines),
                             OptimizeModal, WorldModal, RecipesModal, AvoidChips, planner.css
   components/
     LoadBalancerTool.tsx    Left panel UI (input, outputs, belt tier, toggles) → calls solve()
@@ -156,6 +159,7 @@ src/
     ratios.ts               rates → coprime integer ratios (handles decimals like 12.5)
     builder.ts              Recursive divide-and-partition balancer construction (3-smooth B, loopbacks)
     multi.ts                Several inputs: pack whole inputs into outputs, split only the straddlers
+    approx.ts               Precision: the simplest ratio within a % tolerance (outputs back up, so close is fine)
     simulate.ts             Fixed-point steady-state flow simulator (the correctness check)
     solve.ts                Entry point: validate → leftover → reduce → build → simulate → warnings
     layout.ts               Longest-path layering; 'LR' or 'BT' (BT is the UI default)

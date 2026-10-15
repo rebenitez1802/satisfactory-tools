@@ -69,6 +69,23 @@ above it leaves on several equal belts, so no merger tree carries more than
 the cap. **Group onto belts** puts a machine group's inputs on the fewest
 belts of the cap first, which is fewer inputs but usually more splitting.
 
+#### Precision
+
+Planner rates rarely make clean ratios: 1956/min into 92.4 / 88.9 / 1077.2 /
+697.5 reduces to 19,560 shares, which takes 25 splitters, 27 mergers and 123
+loopbacks. In the game that precision is wasted. An output feeding machines
+backs up once they are full, and its splitter then passes the rest on to the
+other outputs, so a slightly wrong share fixes itself. **Precision** (Exact,
+±1%, ±2%, ±5%) lets every output be that far off, as a percentage of its own
+rate, and picks the ratio within it that takes the fewest buildings
+(loopbacks count double). The same case is 12 splitters + 12 mergers at ±1%,
+9 + 7 at ±2%, and 4 + 2 at ±5%. Outputs show what they get and how far off it
+is ("90.6 (−2%)"). A Leftover output takes everything and never backs up, so
+with one present the other outputs only round up and the Leftover only down.
+With several inputs, precision also drops tiny cuts: a machine whose piece
+for an output is within that output's allowance goes whole to its other
+output instead of being split. Links take `tol=2` for ±2%.
+
 ### Production Chains
 
 Plan a factory from resource nodes to products. Add a miner on the nodes you

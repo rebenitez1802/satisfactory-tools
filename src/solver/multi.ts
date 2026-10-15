@@ -9,6 +9,8 @@
 // An output's merger tree never carries more than the output itself, so
 // outputs above the belt limit first become several output belts.
 
+import { maxError, roundedNote, simplestRatio, sinkLabel } from './approx'
+import type { Bound } from './approx'
 import { Builder, divide } from './builder'
 import { fitRatios } from './ratios'
 import { simulate } from './simulate'
@@ -99,7 +101,7 @@ function splitWide(outputs: OutputSpec[], beltMax: number | undefined, tol: numb
   return { outputs: out, split }
 }
 
-export function solveMulti(inputs: number[], requested: OutputSpec[], beltMax?: number): SolveResult {
+export function solveMulti(inputs: number[], requested: OutputSpec[], beltMax?: number, tolerance = 0): SolveResult {
   const warnings: SolveWarning[] = []
   if (inputs.some((r) => !(r > 0))) {
     return { ok: false, warnings, error: 'Every input rate must be a positive number.' }
@@ -145,41 +147,69 @@ export function solveMulti(inputs: number[], requested: OutputSpec[], beltMax?: 
   })
   const sinkIds = outputs.map((o) => b.addNode('sink', { label: o.label }))
 
+  // With a tolerance, a split input's pieces may be rounded (or dropped when
+  // tiny), each output sharing its allowance among the pieces cut for it.
+  // With a leftover, outputs only round up and the leftover only down.
+  const asked = outputs.map((o) => o.rate * scale)
+  const isLeftover = (j: number) => outputs[j].from >= requested.length
+  const cuts = outputs.map(() => 0)
+  for (const p of pieces) if (pieces.some((q) => q.input === p.input && q !== p)) cuts[p.output]++
+  const bound = (p: Piece): Bound => {
+    const allow = (tolerance * asked[p.output]) / Math.max(1, cuts[p.output])
+    if (isLeftover(p.output)) return { lo: -p.rate, hi: 0 }
+    return { lo: leftover > 0 ? 0 : -allow, hi: allow }
+  }
+
   const streams: string[][] = outputs.map(() => [])
   const targets = outputs.map(() => 0)
   const closeLoops: (() => void)[] = []
   let loopbacks = 0
   let splitInputs = 0
   let snapped = false
+  let rounded = false
   for (const i of order) {
     const mine = pieces.filter((p) => p.input === i)
     const src = sourceIds.get(i)!
-    if (mine.length === 1) {
-      streams[mine[0].output].push(src)
-      targets[mine[0].output] += inputs[i]
+    let ratios = mine.map(() => 1)
+    if (mine.length > 1) {
+      const fitted = fitRatios(mine.map((p) => p.rate))
+      ratios = tolerance > 0 ? simplestRatio(mine.map((p) => p.rate), mine.map(bound), fitted.ratios) : fitted.ratios
+      if (ratios !== fitted.ratios) rounded = true
+      else snapped ||= fitted.snapped
+    }
+    const used = mine.map((p, k) => ({ output: p.output, r: ratios[k] })).filter((u) => u.r > 0)
+    if (used.length === 1) {
+      streams[used[0].output].push(src)
+      targets[used[0].output] += inputs[i]
       continue
     }
     splitInputs++
-    const fitted = fitRatios(mine.map((p) => p.rate))
-    snapped ||= fitted.snapped
-    const division = divide(b, src, fitted.ratios)
-    mine.forEach((p, k) => {
-      streams[p.output].push(...division.streams[k])
-      targets[p.output] += (inputs[i] * fitted.ratios[k]) / fitted.N
+    const n = used.reduce((sum, u) => sum + u.r, 0)
+    const division = divide(
+      b,
+      src,
+      used.map((u) => u.r),
+    )
+    used.forEach((u, k) => {
+      streams[u.output].push(...division.streams[k])
+      targets[u.output] += (inputs[i] * u.r) / n
     })
     loopbacks += division.loopbacks
     closeLoops.push(division.closeLoop)
   }
-  streams.forEach((ports, j) => b.addEdge(b.mergeStreams(ports), sinkIds[j]))
+  // An output whose only pieces were dropped (a tiny leftover) has no sink.
+  const dropped = new Set(sinkIds.filter((_, j) => streams[j].length === 0))
+  b.nodes = b.nodes.filter((n) => !dropped.has(n.id))
+  streams.forEach((ports, j) => ports.length > 0 && b.addEdge(b.mergeStreams(ports), sinkIds[j]))
   for (const close of closeLoops) close()
 
   const graph = { nodes: b.nodes, edges: b.edges }
   sinkIds.forEach((id, j) => {
-    const sink = graph.nodes.find((n) => n.id === id)!
+    const sink = graph.nodes.find((n) => n.id === id)
+    if (!sink) return
     sink.target = targets[j]
-    const rateStr = `${round(targets[j])}/min`
-    sink.label = outputs[j].label ? `${outputs[j].label} · ${rateStr}` : rateStr
-    if (outputs[j].from >= requested.length) sink.leftover = true
+    sink.label = sinkLabel(outputs[j].label, targets[j], rounded && !isLeftover(j) ? asked[j] : undefined)
+    if (isLeftover(j)) sink.leftover = true
   })
 
   // Verify by simulation, as for a single input.
@@ -188,6 +218,7 @@ export function solveMulti(inputs: number[], requested: OutputSpec[], beltMax?: 
     return { ok: false, warnings, error: 'Internal error: flow simulation did not converge.' }
   }
   for (let j = 0; j < sinkIds.length; j++) {
+    if (dropped.has(sinkIds[j])) continue
     const got = sim.nodeInflow.get(sinkIds[j]) ?? 0
     if (Math.abs(got - targets[j]) > Math.max(1e-6, targets[j] * 1e-5)) {
       return {
@@ -198,12 +229,26 @@ export function solveMulti(inputs: number[], requested: OutputSpec[], beltMax?: 
     }
   }
 
-  if (leftover > 0) {
+  const kept = outputs.map((_, j) => j).filter((j) => !dropped.has(sinkIds[j]))
+  const leftoverNow = kept.filter(isLeftover).reduce((s, j) => s + targets[j], 0)
+  const pulling = kept.filter((j) => !isLeftover(j))
+  const approx = rounded
+    ? {
+        maxError: maxError(
+          pulling.map((j) => targets[j]),
+          pulling.map((j) => asked[j]),
+        ),
+      }
+    : undefined
+  if (approx) {
+    warnings.push({ kind: 'info', message: roundedNote(approx.maxError, undefined, leftover > 0 ? (leftoverNow > 0 ? 'kept' : 'dropped') : 'none') })
+  }
+  if (leftoverNow > 0) {
     warnings.push({
       kind: 'leftover',
       message:
         `Outputs add up to ${round(sum)} of ${round(total)}/min, so the ` +
-        `remaining ${round(leftover)}/min goes to a Leftover output (red).`,
+        `remaining ${round(leftoverNow)}/min goes to a Leftover output (red).`,
     })
   }
   if (wide.length > 0) {
@@ -233,5 +278,5 @@ export function solveMulti(inputs: number[], requested: OutputSpec[], beltMax?: 
     }
   }
 
-  return { ok: true, graph, leftover, loopbacks, inputs: { count: inputs.length, split: splitInputs }, warnings }
+  return { ok: true, graph, leftover: leftoverNow, loopbacks, approx, inputs: { count: inputs.length, split: splitInputs }, warnings }
 }

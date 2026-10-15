@@ -228,16 +228,45 @@ byproducts (a recipe's second output, or all of a generator's outputs).
     Mk.2"), or that none does. For a limited extractor group the best site
     counts; a group's part machine counts at its part clock.
 - **Splits and merges:** an output port feeding several edges gets a splitter
-  badge. Clicking it opens a read-only load-balancer popup for those rates, with
-  surplus as the leftover output, plus "Open in Load Balancer". Inputs fed by
-  several edges get a merger badge.
-  - The producing group is many machines, so the balancer has **one input
-    per machine** (7.5 machines are 7 inputs plus one at half rate). Whole
-    machines go straight to an output, so this needs the fewest splitters.
-    A toggle groups the machines onto the fewest belts of the plan's tier
-    instead. With a tier set, it is the balancer's belt cap: an output above
-    it leaves on several belts. The link carries the inputs (`in=30x30`)
-    and the cap.
+  badge (⑂). Inputs fed by several edges get a merger badge. The splitter
+  badge opens the **split dialog** (`SplitPopup`, advice from `adviseSplit`
+  in `src/planner/splits.ts`), with three ways to build the split, the way
+  players do. It opens on the recommended one:
+  - **Manifold**, recommended when it works: a splitter in front of each
+    machine along the belt. Machines take what they need and back up when
+    full, so the splitters pass the rest on. It works when every branch
+    feeds machines, or when exactly one branch feeds a goal (storage, a
+    sink, a train), which then goes last and takes the overflow. Two or more
+    goals take everything they get, so a manifold can't share between them,
+    and the load balancer is recommended instead. The tab lists the line in
+    order, with each consumer's machines.
+  - **How to build** (`manifoldPlan` in `splits.ts`) lays the manifold out
+    in lines, since a line is a real belt or pipe of the plan's tier
+    (without a tier, one line). Consumer groups go onto as few lines as fit,
+    biggest first; a group bigger than a line is cut into even chunks of
+    whole machines. Each line lists the producers merged onto it, its stops
+    in order (the overflow goal last), and its splitters: one per machine,
+    except the last machine of a line that takes the belt's end. Each branch
+    gets the slowest tier that carries one machine's intake ("Mk.1 branches"),
+    so it can't grab more than that while the line fills. It also notes that
+    with short supply the last machines on a line starve first.
+  - **Load balancer:** read-only, as in the balancer tool. The producing
+    group is many machines, so it has **one input per machine** (7.5 machines
+    are 7 inputs plus one at half rate). Whole machines go straight to an
+    output, so this needs the fewest splitters. A toggle groups the machines
+    onto the fewest belts of the plan's tier instead. With a tier set, it is
+    the balancer's belt cap: an output above it leaves on several belts.
+    **Precision** starts at ±2% (see the README's balancer section). "Open in
+    Load Balancer" carries the inputs (`in=30x30`), the cap and the precision.
+  - **Dedicated machines**, for producer machine groups: one sub-group per
+    consumer, so the item never splits. Exact, and no splitters, for at most
+    one extra machine per sub-group. Each sub-group is shown as whole
+    machines sharing one clock ("14 at 95.2%"), as the underclock machine
+    mode counts them, whatever the plan's mode. **Split into N groups**
+    does it in the plan (`splitByConsumer` in `edit.ts`): the first belt
+    stays on the node, every other belt moves to a copy below it, and every
+    copy gets the node's input belts. It is offered only for plain recipe
+    nodes (not limited, no power target) whose other outputs have no belts.
 - **Summary:** total MW (power used; with generators, also power made and
   the net), buildings by type, shards and Somersloops, raw resources, net
   outputs, surplus, missing inputs, bottlenecks, then the build checklist's
